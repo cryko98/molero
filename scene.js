@@ -69,6 +69,8 @@
     <radialGradient id="lightHole" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#000"/><stop offset=".55" stop-color="#000" stop-opacity=".7"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
     <radialGradient id="warm" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ff7a1a" stop-opacity=".45"/><stop offset="1" stop-color="#ff7a1a" stop-opacity="0"/></radialGradient>
     <radialGradient id="moon" cx=".4" cy=".4" r=".6"><stop offset="0" stop-color="#fff6e6"/><stop offset="1" stop-color="#cfc4b0"/></radialGradient>
+    <filter id="glow" filterUnits="userSpaceOnUse" x="-50" y="-50" width="1300" height="6000">
+      <feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4a4a4e"/><stop offset="1" stop-color="#1f1f22"/></linearGradient>
     <clipPath id="under"><rect id="underRect" x="0" y="${GROUND}" width="${W}" height="${H - GROUND}"/></clipPath>
     <clipPath id="poolClip"><ellipse cx="${CH.pool.x}" cy="${CH.pool.y}" rx="${CH.pool.rx - 3}" ry="${CH.pool.ry - 3}"/></clipPath>
@@ -144,8 +146,8 @@
 
   addEdge('surf', 'hole', `M200 ${N.surf.y} L200 ${N.hole.y}`);
   addEdge('hole', 'vault', `M200 ${N.hole.y} C200 290 380 ${N.vault.y} ${N.vault.x} ${N.vault.y}`);
-  addEdge('vault', 'pool', `M${N.vault.x} ${N.vault.y} C400 ${N.vault.y + 34} 170 420 ${N.pool.x} ${N.pool.y}`);
-  addEdge('vault', 'treasury', `M${N.vault.x} ${N.vault.y} C510 420 530 500 ${N.treasury.x} ${N.treasury.y}`);
+  // tunnels run around the root fan (left edge and along the bottom) so no root is cut
+  addEdge('hole', 'pool', `M200 ${N.hole.y} C150 300 110 450 ${N.pool.x} ${N.pool.y}`);
   addEdge('pool', 'treasury', `M${N.pool.x} ${N.pool.y} C260 650 440 640 ${N.treasury.x} ${N.treasury.y}`);
   addEdge('treasury', 'furnace', `M${N.treasury.x} ${N.treasury.y} C700 650 860 630 ${N.furnace.x} ${N.furnace.y}`);
   Object.values(CH).forEach((c) => chamberShape(c));
@@ -202,56 +204,111 @@
   }
 
   // ---------- roots: the fee split ----------
-  // taproot from the tree into the vault, then one root per destination,
-  // each ending exactly at what it funds
-  const SPLIT = { x: TX, y: CH.vault.y + CH.vault.ry - 2 };
-  const taproot = {
-    d: `M${TX} ${GROUND + 2} C${TX - 4} 190 ${TX + 4} 222 ${TX} ${CH.vault.y - CH.vault.ry + 4} L${SAFE.x - 2} ${SAFE.y - 30}`,
-    w: 12, color: '#8a5a3c',
-  };
+  // The taproot carries the fee from the tree into the vault's safe; under the
+  // vault it splits into one root per destination. Each root is a tapered
+  // organic shape (bark) with a coloured sap vein that says where it goes,
+  // and its tip fans out into exactly what it funds.
+  const SPLIT = { x: TX, y: CH.vault.y + CH.vault.ry + 4 };
+  const BARK = '#6e4c34', BARK_DARK = '#3b281a';
+  const taproot = { color: '#ff7a1a', w0: 24, w1: 13,
+    d: `M${TX} ${GROUND - 2} C${TX - 6} 186 ${TX + 6} 214 ${TX + 1} ${CH.vault.y - CH.vault.ry + 6} S${SAFE.x - 1} ${SAFE.y - 42} ${SAFE.x} ${SAFE.y - 30}` };
+  const feeder = { color: '#ff7a1a', w0: 14, w1: 17,
+    d: `M${SAFE.x} ${SAFE.y + 30} C${SAFE.x} ${SAFE.y + 44} ${SPLIT.x} ${SPLIT.y - 16} ${SPLIT.x} ${SPLIT.y}` };
   const ROOTS = [
-    { key: 'liq', pct: '25%', name: 'ROOTS liquidity', color: '#ff6a1a', w: 7,
-      d: `M${TX - 4} ${SPLIT.y} C${TX - 60} 400 330 410 ${CH.pool.x + 56} ${CH.pool.y + 22}` },
-    { key: 'extra', pct: '10%', name: 'Additional liquidity', color: '#a8745a', w: 4.5,
-      d: `M${TX - 8} ${SPLIT.y - 2} C${TX - 110} 380 270 390 ${CH.pool.x + 16} ${CH.pool.y + 22}` },
-    { key: 'rewards', pct: '40%', name: 'Rewards', color: '#9b7cf0', w: 9,
-      d: `M${TX + 2} ${SPLIT.y} C${TX + 4} 420 ${PILE.x - 6} 470 ${PILE.x} ${PILE.y - 26}` },
-    { key: 'buyback', pct: '25%', name: 'Buyback', color: '#d4a52a', w: 7,
-      d: `M${TX + 6} ${SPLIT.y} C${TX + 90} 390 ${STASH.x - 20} 410 ${STASH.x} ${STASH.y - 24}` },
+    { key: 'liq', pct: '25%', color: '#ff6a1a', w0: 13, w1: 3.6, tag: [0.52, 0, 22],
+      d: `M${SPLIT.x - 3} ${SPLIT.y + 2} C560 402 430 404 350 438 S292 500 290 536` },
+    { key: 'extra', pct: '10%', color: '#d39a74', w0: 8.5, w1: 2.6, tag: [0.4, 0, -16],
+      d: `M${SPLIT.x - 7} ${SPLIT.y} C540 384 390 382 312 418 S252 496 250 536` },
+    { key: 'rewards', pct: '40%', color: '#9b7cf0', w0: 17, w1: 4.5, tag: [0.42, 26, 0],
+      d: `M${SPLIT.x + 1} ${SPLIT.y + 3} C604 424 642 470 ${PILE.x - 2} ${PILE.y - 12}` },
+    { key: 'buyback', pct: '25%', color: '#e0b13a', w0: 13, w1: 3.6, tag: [0.42, 0, -18],
+      d: `M${SPLIT.x + 6} ${SPLIT.y + 1} C664 384 820 392 868 440 S${STASH.x} 498 ${STASH.x} ${STASH.y - 24}` },
   ];
-  // thin rootlets hanging off the main roots, like real root hairs
-  const RootletAt = (r, t, side, len) => {
-    const p = r.el.getPointAtLength(r.len * t);
-    const q = r.el.getPointAtLength(Math.min(r.len, r.len * t + 2));
-    const nx = -(q.y - p.y), ny = q.x - p.x, nl = Math.hypot(nx, ny) || 1;
-    const ex = p.x + (nx / nl) * len * side, ey = p.y + (ny / nl) * len * side + len * 0.6;
-    el('path', { d: `M${p.x} ${p.y} Q${(p.x + ex) / 2 + side * 6} ${(p.y + ey) / 2 - 8} ${ex} ${ey}`, stroke: r.color, 'stroke-width': 1.4, opacity: 0.35 }, rootsLayer);
-  };
-  function drawRoot(r) {
-    r.base = el('path', { d: r.d, stroke: r.color, 'stroke-width': r.w, opacity: 0.85 }, rootsLayer);
-    r.el = r.base;
-    r.len = r.base.getTotalLength();
-    r.hi = el('path', { d: r.d, stroke: '#fff', 'stroke-width': r.w * 0.25, opacity: 0.15, transform: 'translate(-1 -1)' }, rootsLayer);
-    r.pulse = el('path', { d: r.d, stroke: '#fff3d6', 'stroke-width': r.w + 4, opacity: 0, 'stroke-dasharray': `46 ${r.len + 60}` }, rootsLayer);
-  }
-  drawRoot(taproot);
-  ROOTS.forEach(drawRoot);
-  ROOTS.forEach((r) => { RootletAt(r, 0.3, 1, 18); RootletAt(r, 0.5, -1, 22); RootletAt(r, 0.72, 1, 16); });
-  // knot where the fee splits
-  el('circle', { cx: SPLIT.x, cy: SPLIT.y, r: 7, fill: '#2a1d14', stroke: '#f2eee6', 'stroke-width': 2.5 }, rootsLayer);
 
-  // percentage tags along each root
-  function tag(r, t) {
-    const p = r.base.getPointAtLength(r.len * t);
-    const g = el('g', { transform: `translate(${p.x} ${p.y})` }, labels);
-    const rect = el('rect', { y: -11, height: 22, rx: 11, fill: '#141414', stroke: r.color, 'stroke-width': 1.5 }, g);
-    const t1 = text(g, 0, 5, '', { 'font-size': 11, 'font-weight': 800, fill: '#fff' });
-    const a = el('tspan', { fill: r.color }, t1); a.textContent = r.pct + ' ';
-    const b = el('tspan', {}, t1); b.textContent = r.name;
-    const w = t1.getComputedTextLength() + 20;
-    rect.setAttribute('x', -w / 2); rect.setAttribute('width', w);
+  // geometry helper: a hidden path used to sample any centre line
+  const measure = el('path', { visibility: 'hidden' }, rootsLayer);
+  function sample(d) {
+    measure.setAttribute('d', d);
+    const L = measure.getTotalLength();
+    return { L, at: (s) => measure.getPointAtLength(clamp(s, 0, L)) };
   }
-  tag(ROOTS[0], 0.52); tag(ROOTS[1], 0.3); tag(ROOTS[2], 0.62); tag(ROOTS[3], 0.55);
+  // a closed outline around a centre line, w0 wide at the start, w1 at the tip
+  function taperD(d, w0, w1, wobble, seed) {
+    const m = sample(d);
+    const n = Math.max(16, Math.round(m.L / 4));
+    const left = [], right = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, p = m.at(t * m.L);
+      const a = m.at(t * m.L - 1), b = m.at(t * m.L + 1);
+      const tl = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const nx = -(b.y - a.y) / tl, ny = (b.x - a.x) / tl;
+      const w = (w0 + (w1 - w0) * Math.pow(t, 0.7)) / 2 * (1 + (wobble || 0) * Math.sin(t * 19 + seed) * Math.sin(t * 6.1 + seed * 1.7));
+      left.push(`${(p.x + nx * w).toFixed(1)} ${(p.y + ny * w).toFixed(1)}`);
+      right.push(`${(p.x - nx * w).toFixed(1)} ${(p.y - ny * w).toFixed(1)}`);
+    }
+    return 'M' + left.join(' L') + ' L' + right.reverse().join(' L') + ' Z';
+  }
+
+  const rootShadow = el('g', { opacity: 0.35, transform: 'translate(2 3)' }, rootsLayer);
+  const rootHairs = el('g', {}, rootsLayer);
+  const rootBodies = el('g', {}, rootsLayer);
+  const rootPulses = el('g', { filter: 'url(#glow)' }, rootsLayer);
+
+  // little drooping hairs and the fan of rootlets at the tip
+  function hair(x, y, ang, len, w, color) {
+    const ex = x + Math.cos(ang) * len, ey = y + Math.sin(ang) * len + len * 0.45;
+    const d = `M${x.toFixed(1)} ${y.toFixed(1)} Q${(x + Math.cos(ang) * len * 0.6).toFixed(1)} ${(y + Math.sin(ang) * len * 0.6).toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}`;
+    el('path', { d: taperD(d, w, 0.3, 0, 0), fill: color || BARK }, rootHairs);
+  }
+
+  function drawRoot(r, seed, opts) {
+    opts = opts || {};
+    const m = sample(r.d);
+    r.len = m.L;
+    el('path', { d: taperD(r.d, r.w0 + 3, r.w1 + 1, 0.1, seed), fill: '#000' }, rootShadow);
+    r.bark = el('path', { d: taperD(r.d, r.w0, r.w1, 0.12, seed), fill: BARK, stroke: BARK_DARK, 'stroke-width': 0.9 }, rootBodies);
+    // bark creases: short, irregular nicks along the edges, never across the whole root
+    for (let k = 0, s = 14 + (seed % 9); s < m.L - 14; k++, s += 26 + ((seed * 5 + k * 11) % 23)) {
+      const p = m.at(s), a = m.at(s - 1), b = m.at(s + 1);
+      const tl = Math.hypot(b.x - a.x, b.y - a.y) || 1, nx = -(b.y - a.y) / tl, ny = (b.x - a.x) / tl;
+      const w = (r.w0 + (r.w1 - r.w0) * Math.pow(s / m.L, 0.7)) * 0.48;
+      const side = k % 2 ? 1 : -1, tx = (b.x - a.x) / tl, ty = (b.y - a.y) / tl;
+      const x1 = p.x + nx * w * side, y1 = p.y + ny * w * side;
+      const x2 = p.x + nx * w * side * 0.25 + tx * 3, y2 = p.y + ny * w * side * 0.25 + ty * 3;
+      el('path', { d: `M${x1.toFixed(1)} ${y1.toFixed(1)} Q${(x1 + tx * 3).toFixed(1)} ${(y1 + ty * 3).toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`, stroke: BARK_DARK, 'stroke-width': 0.9, fill: 'none', opacity: 0.45, 'stroke-linecap': 'round' }, rootBodies);
+    }
+    r.vein = el('path', { d: taperD(r.d, r.w0 * 0.34, r.w1 * 0.3, 0, seed), fill: r.color, opacity: 0.9 }, rootBodies);
+    el('path', { d: taperD(r.d, r.w0 * 0.14, 0.2, 0, seed), fill: '#fff', opacity: 0.16, transform: 'translate(-0.8 -1)' }, rootBodies);
+    if (!opts.noHairs) {
+      for (let k = 0, t = 0.24; t < 0.84; t += 0.17 + ((seed + k) % 3) * 0.04, k++) {
+        const s = t * m.L, p = m.at(s), a = m.at(s - 1), b = m.at(s + 1);
+        const ang = Math.atan2(b.y - a.y, b.x - a.x) + (k % 2 ? 1 : -1) * (0.8 + ((seed * 7 + k * 3) % 5) * 0.12);
+        hair(p.x, p.y, ang, 12 + ((seed * 13 + k * 7) % 12), 1.3 + (1 - t) * 1.1);
+      }
+    }
+    if (opts.fan) {
+      const end = m.at(m.L), pre = m.at(m.L - 4);
+      const base = Math.atan2(end.y - pre.y, end.x - pre.x);
+      [-0.7, -0.25, 0.25, 0.7].forEach((o, i) => hair(end.x, end.y, base + o, 9 + (i % 2) * 5, 2.2, BARK));
+    }
+    r.pulse = el('path', { d: r.d, stroke: '#fff1d0', 'stroke-width': Math.max(3, r.w0 * 0.45), 'stroke-linecap': 'round', fill: 'none', opacity: 0, 'stroke-dasharray': `38 ${r.len + 80}` }, rootPulses);
+  }
+
+  // surface flare where the trunk meets the ground
+  el('path', { d: taperD(`M${TX - 6} ${GROUND + 1} C${TX - 24} ${GROUND + 4} ${TX - 44} ${GROUND + 8} ${TX - 62} ${GROUND + 16}`, 8, 1, 0.1, 3), fill: BARK, stroke: BARK_DARK, 'stroke-width': 0.8 }, rootBodies);
+  el('path', { d: taperD(`M${TX + 6} ${GROUND + 1} C${TX + 26} ${GROUND + 4} ${TX + 48} ${GROUND + 10} ${TX + 66} ${GROUND + 20}`, 8, 1, 0.1, 5), fill: BARK, stroke: BARK_DARK, 'stroke-width': 0.8 }, rootBodies);
+  drawRoot(taproot, 2, { noHairs: false });
+  drawRoot(feeder, 4, { noHairs: true });
+  ROOTS.forEach((r, i) => drawRoot(r, 11 + i * 17, { fan: true }));
+  // the knot where the fee splits
+  el('ellipse', { cx: SPLIT.x, cy: SPLIT.y + 1, rx: 13, ry: 9, fill: BARK, stroke: BARK_DARK, 'stroke-width': 1 }, rootBodies);
+  const knotCore = el('circle', { cx: SPLIT.x, cy: SPLIT.y + 1, r: 4, fill: '#ff7a1a' }, rootBodies);
+
+  // small percentage tags next to each root
+  ROOTS.forEach((r) => {
+    const m = sample(r.d), [t, dx, dy] = r.tag, p = m.at(m.L * t);
+    text(labels, p.x + dx, p.y + dy + 4, r.pct, { 'font-size': 13, 'font-weight': 900, fill: r.color, stroke: '#120c08', 'stroke-width': 4, 'paint-order': 'stroke' });
+  });
 
   // ---------- stations ----------
   // fee vault: a round safe door, the taproot plugs into it
@@ -272,7 +329,7 @@
   const liquidShine = el('path', { fill: 'none', stroke: '#ffc27a', 'stroke-width': 1.5, opacity: 0.6 }, poolBack);
   const poolFront = el('g', { 'clip-path': 'url(#poolClip)' }, world);
   const liquidFront = el('path', { fill: 'url(#liquid)', opacity: 0.55 }, poolFront);
-  label(CH.pool.x, CH.pool.y + CH.pool.ry + 24, 'ROOTS/wXMR POOL', '35% liquidity, new LP tokens burned', '#ff8a4a');
+  label(CH.pool.x, CH.pool.y + CH.pool.ry + 24, 'ROOTS/wXMR POOL', '25% + 10% liquidity, new LP burned', '#ff8a4a');
   function drawLiquid(t) {
     // the left part of the chamber is a dry ledge where the mole stands
     const x0 = N.pool.x + 34, x1 = CH.pool.x + CH.pool.rx;
@@ -373,7 +430,10 @@
 
   // ---------- layers above the world ----------
   // darkness with light holes; mole, items and labels stay crisp above it
-  const dark = el('rect', { x: 0, y: GROUND, width: W, height: H - GROUND, fill: '#000', opacity: 0.5, mask: 'url(#darkMask)', 'pointer-events': 'none' }, svg);
+  const dark = el('rect', { x: 0, y: GROUND, width: W, height: H - GROUND, fill: '#000', opacity: 0.42, mask: 'url(#darkMask)', 'pointer-events': 'none' }, svg);
+  // roots and the pool surface stay vivid above the darkness
+  svg.appendChild(rootsLayer);
+  svg.appendChild(poolFront);
   const moleLayer = el('g', {}, svg);
   const items = el('g', {}, svg);
   const fx = el('g', {}, svg);
@@ -492,14 +552,15 @@
   // a glow travelling along a root; reverse runs from the tip back to the start
   function pulse(r, ms, reverse) {
     return new Promise((resolve) => {
-      const from = reverse ? -r.len : 46, to = reverse ? 46 : -r.len;
+      const from = reverse ? -r.len : 38, to = reverse ? 38 : -r.len;
       r.pulse.animate([
         { strokeDashoffset: from, opacity: 0 },
         { strokeDashoffset: from + (to - from) * 0.08, opacity: 0.95, offset: 0.08 },
         { strokeDashoffset: to - (to - from) * 0.04, opacity: 0.95, offset: 0.92 },
         { strokeDashoffset: to, opacity: 0 },
       ], { duration: ms / speedMul, easing: 'ease-in-out' }).onfinish = resolve;
-      r.base.animate([{ opacity: 0.85 }, { opacity: 1 }, { opacity: 0.85 }], { duration: ms / speedMul });
+      // the sap vein lights up while the pulse passes
+      r.vein.animate([{ opacity: 0.9, fill: r.color }, { opacity: 1, fill: '#fff1d0', offset: 0.5 }, { opacity: 0.9, fill: r.color }], { duration: ms / speedMul });
     });
   }
   function treeGlow() {
@@ -614,10 +675,12 @@
       vaultLight.setAttribute('fill', '#ff6600');
       wheel.animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(540deg)' }], { duration: 1100 / speedMul, easing: 'ease-in-out' });
       say(SAFE.x + 150, SAFE.y - 56, 'splitting the 2%', '#f5f5f5');
-      await wait(1000);
+      await wait(700);
       vaultLight.setAttribute('fill', '#5a2a08');
 
-      // the split runs down every root at once and lands where it belongs
+      // out of the safe to the knot, then down every root at once
+      await pulse(feeder, 500);
+      knotCore.animate([{ r: 4, fill: '#ff7a1a' }, { r: 7, fill: '#fff1d0' }, { r: 4, fill: '#ff7a1a' }], { duration: 500 / speedMul });
       M.hop = 1;
       const ms = 1700;
       pulse(R.liq, ms); pulse(R.extra, ms);
@@ -700,6 +763,7 @@
       // deeper liquidity strengthens the coin: the glow climbs back up to the tree
       pulse(R.extra, 1500, true);
       await pulse(R.liq, 1500, true);
+      await pulse(feeder, 400, true);
       await pulse(taproot, 900, true);
       treeGlow();
       await wait(600);
