@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>$MOLERO · He digs. You earn. Nobody sees.</title>
+  <meta name="description" content="$MOLERO is the underground worker of XMR ROOTS. Watch the mole collect fees, pay holders in wXMR and bury ROOTS, live from Solana.">
+  <meta property="og:title" content="$MOLERO · He digs. You earn. Nobody sees.">
+  <meta property="og:description" content="A wXMR-paired holder-rewards coin on XMR ROOTS. Every fee, payout and burn, animated live from Solana.">
+  <meta name="theme-color" content="#0d0d0d">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <meta property="og:image" content="assets/molero-logo.jpg">
+  <link rel="icon" type="image/png" href="assets/favicon-64.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#">
+      <img class="brand-logo" src="assets/molero-logo.jpg" alt="MOLERO logo" width="44" height="44">
+      <span>
+        <div class="brand-name">MOLERO</div>
+        <div class="brand-sub">The mole of Monero · on XMR ROOTS</div>
+      </span>
+    </a>
+    <nav class="nav">
+      <a href="#burrow">Live burrow</a>
+      <a href="#jobs">How he works</a>
+      <a href="#calc">Rewards</a>
+      <a href="#tunnel">How to buy</a>
+    </nav>
+    <a class="btn btn-primary" id="buy-top" href="https://xmrroots.xyz/coins.html" target="_blank" rel="noopener">Buy $MOLERO</a>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <span class="pill"><span class="pill-dot"></span>wXMR pair · Holder rewards · XMR ROOTS</span>
+      <h1>$MOLE<span>RO</span></h1>
+      <p class="tagline">He digs. <em>You earn.</em> Nobody sees.</p>
+      <p class="lead">Mole + Monero. $MOLERO is the hard-working mole under XMR ROOTS: he collects the 2% fees, buries ROOTS, feeds the roots and carries wXMR rewards straight to holder wallets. It all happens on-chain, and below you can watch him do it live.</p>
+      <div class="cta">
+        <a class="btn btn-primary" id="buy-hero" href="https://xmrroots.xyz/coins.html" target="_blank" rel="noopener">Buy on XMR ROOTS</a>
+        <a class="btn btn-ghost" href="#burrow">Watch the mole live ↓</a>
+      </div>
+      <div class="ca">
+        <span class="ca-label">CA</span>
+        <span class="ca-value mono" id="ca-value">Digging… launching soon on XMR ROOTS</span>
+        <button class="btn btn-ghost btn-sm" id="ca-copy" type="button">Copy</button>
+      </div>
+    </div>
+    <div class="hero-art">
+      <div class="glow"></div>
+      <div class="molehill" id="molehill">
+        <svg class="hill-back" viewBox="0 0 520 220" aria-hidden="true">
+          <path d="M118 104 C150 66 210 52 260 52 C310 52 370 66 402 104 Z" fill="#3a2a1e"/>
+          <path d="M150 96 C180 74 220 66 260 66 C300 66 340 74 370 96" stroke="#4a3424" stroke-width="4" fill="none"/>
+          <ellipse cx="260" cy="104" rx="124" ry="20" fill="#0a0604"/>
+        </svg>
+        <div class="peek">
+          <div class="rise" id="rise"><img class="hero-mole" id="hero-mole" src="assets/molero-cutout.webp" alt="MOLERO: a mole in an orange Monero beanie and a grey balaclava, climbing out of a molehill" width="657" height="907"></div>
+        </div>
+        <svg class="hill-front" viewBox="0 0 520 220" aria-hidden="true">
+          <defs>
+            <linearGradient id="dirt" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#735339"/><stop offset=".35" stop-color="#563d29"/><stop offset="1" stop-color="#22170f"/>
+            </linearGradient>
+            <radialGradient id="dirtShade" cx=".5" cy=".15" r=".7">
+              <stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".45"/>
+            </radialGradient>
+          </defs>
+          <path d="M0 220 C30 182 70 134 112 104 C142 84 172 86 202 96 C232 106 288 106 318 96 C348 86 378 84 408 104 C450 134 490 182 520 220 Z" fill="url(#dirt)"/>
+          <path d="M0 220 C30 182 70 134 112 104 C142 84 172 86 202 96 C232 106 288 106 318 96 C348 86 378 84 408 104 C450 134 490 182 520 220 Z" fill="url(#dirtShade)"/>
+          <path d="M112 104 C142 84 172 86 202 96 C232 106 288 106 318 96 C348 86 378 84 408 104" stroke="#8f6d50" stroke-width="5" fill="none" stroke-linecap="round"/>
+          <g><ellipse cx="277" cy="204" rx="10.8" ry="8.3" fill="#7e5c42"/><ellipse cx="383" cy="208" rx="8.7" ry="5.5" fill="#5c4330"/><ellipse cx="167" cy="173" rx="14.2" ry="8.5" fill="#6b4d36"/><ellipse cx="331" cy="121" rx="8.0" ry="8.6" fill="#8a6a4e"/><ellipse cx="185" cy="204" rx="11.6" ry="6.5" fill="#7e5c42"/><ellipse cx="69" cy="152" rx="13.9" ry="5.7" fill="#5c4330"/><ellipse cx="286" cy="136" rx="15.2" ry="7.8" fill="#8a6a4e"/><ellipse cx="231" cy="211" rx="10.1" ry="7.9" fill="#7e5c42"/><ellipse cx="146" cy="157" rx="6.2" ry="7.4" fill="#5c4330"/><ellipse cx="368" cy="151" rx="14.0" ry="5.0" fill="#6b4d36"/><ellipse cx="120" cy="155" rx="8.8" ry="5.9" fill="#8a6a4e"/><ellipse cx="265" cy="197" rx="14.2" ry="8.6" fill="#7e5c42"/><ellipse cx="356" cy="138" rx="14.5" ry="5.3" fill="#5c4330"/><ellipse cx="293" cy="139" rx="10.5" ry="5.6" fill="#6b4d36"/><ellipse cx="409" cy="145" rx="9.0" ry="7.6" fill="#8a6a4e"/><ellipse cx="203" cy="169" rx="17.0" ry="8.2" fill="#7e5c42"/><ellipse cx="46" cy="167" rx="13.0" ry="4.4" fill="#5c4330"/><ellipse cx="358" cy="173" rx="13.2" ry="8.7" fill="#6b4d36"/><ellipse cx="369" cy="173" rx="7.9" ry="4.3" fill="#7e5c42"/><ellipse cx="380" cy="156" rx="9.6" ry="6.0" fill="#5c4330"/><ellipse cx="221" cy="162" rx="14.5" ry="4.3" fill="#6b4d36"/><ellipse cx="479" cy="179" rx="9.0" ry="5.3" fill="#7e5c42"/><ellipse cx="320" cy="154" rx="12.7" ry="8.4" fill="#5c4330"/></g>
+          <g><circle cx="413" cy="201" r="2.8" fill="#9a7a5c"/><circle cx="307" cy="155" r="2.4" fill="#2a1d14"/><circle cx="419" cy="201" r="2.1" fill="#2a1d14"/><circle cx="257" cy="180" r="1.4" fill="#9a7a5c"/><circle cx="243" cy="177" r="3.6" fill="#2a1d14"/><circle cx="295" cy="208" r="2.6" fill="#2a1d14"/><circle cx="336" cy="148" r="1.4" fill="#9a7a5c"/><circle cx="382" cy="193" r="2.7" fill="#2a1d14"/><circle cx="194" cy="162" r="1.9" fill="#2a1d14"/><circle cx="146" cy="134" r="3.0" fill="#2a1d14"/><circle cx="266" cy="135" r="2.4" fill="#9a7a5c"/><circle cx="245" cy="170" r="3.3" fill="#2a1d14"/><circle cx="74" cy="181" r="1.4" fill="#2a1d14"/><circle cx="326" cy="171" r="2.2" fill="#9a7a5c"/><circle cx="102" cy="149" r="2.3" fill="#2a1d14"/><circle cx="260" cy="178" r="3.1" fill="#9a7a5c"/><circle cx="349" cy="215" r="1.5" fill="#2a1d14"/><circle cx="177" cy="156" r="2.9" fill="#2a1d14"/><circle cx="421" cy="153" r="3.3" fill="#9a7a5c"/><circle cx="395" cy="181" r="2.4" fill="#2a1d14"/><circle cx="54" cy="212" r="1.6" fill="#2a1d14"/><circle cx="235" cy="198" r="1.4" fill="#2a1d14"/><circle cx="294" cy="159" r="2.4" fill="#2a1d14"/><circle cx="440" cy="183" r="2.0" fill="#2a1d14"/><circle cx="111" cy="152" r="2.9" fill="#2a1d14"/><circle cx="228" cy="154" r="1.2" fill="#9a7a5c"/><circle cx="222" cy="189" r="3.0" fill="#2a1d14"/><circle cx="353" cy="148" r="1.7" fill="#2a1d14"/><circle cx="299" cy="135" r="2.4" fill="#2a1d14"/><circle cx="180" cy="181" r="3.1" fill="#2a1d14"/><circle cx="101" cy="153" r="3.0" fill="#9a7a5c"/><circle cx="400" cy="166" r="1.9" fill="#2a1d14"/></g>
+          <g fill="#2f4a22">
+            <path d="M40 214 l6 -22 l4 22 z"/><path d="M52 216 l8 -28 l3 28 z"/><path d="M470 214 l5 -24 l5 24 z"/><path d="M458 216 l7 -18 l3 18 z"/>
+          </g>
+        </svg>
+        <div class="clods" id="clods" aria-hidden="true"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="marquee" aria-hidden="true">
+  <div class="marquee-track" id="marquee"></div>
+</div>
+
+<section id="burrow">
+  <div class="wrap">
+    <div class="burrow-head">
+      <div>
+        <div class="eyebrow">01 · Live burrow</div>
+        <h2>Watch him work. Live.</h2>
+        <p class="section-lead" style="margin-bottom:0">The burrow listens to the XMR ROOTS program on Solana mainnet. Every fee settlement, holder payout, ROOTS burn and liquidity deposit becomes a job for the mole, and each one links to the real transaction.</p>
+      </div>
+      <div style="text-align:right">
+        <div class="status" id="status"><span class="dot"></span><span id="status-text">Connecting to Solana…</span></div>
+        <div class="watching" id="watching"></div>
+      </div>
+    </div>
+
+    <div class="burrow-grid">
+      <div class="card scene-card">
+        <svg id="scene" viewBox="0 0 1200 660" role="img" aria-label="Underground burrow where the mole carries fees, rewards and burns"></svg>
+        <div class="scene-bar">
+          <div class="now" id="now">The mole is sniffing around…</div>
+          <div class="scene-controls">
+            <button class="btn btn-ghost btn-sm" id="btn-demo" type="button">Demo cycle</button>
+            <button class="btn btn-ghost btn-sm" id="btn-speed" type="button">Speed 1×</button>
+          </div>
+        </div>
+      </div>
+      <div class="card feed">
+        <div class="feed-head"><span>On-chain jobs</span><span class="mono" id="feed-count">0</span></div>
+        <ul class="feed-list" id="feed"><li class="feed-empty" id="feed-empty">Waiting for the next on-chain event…</li></ul>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="card stat">
+        <div class="stat-label">Jobs seen</div>
+        <div class="stat-value" id="st-jobs">0</div>
+        <div class="stat-sub">since you opened the page</div>
+      </div>
+      <div class="card stat">
+        <div class="stat-label">Rewards delivered</div>
+        <div class="stat-value orange" id="st-rewards">0</div>
+        <div class="stat-sub" id="st-rewards-sub">holder payouts seen</div>
+      </div>
+      <div class="card stat">
+        <div class="stat-label">Holder burrows</div>
+        <div class="stat-value" id="st-holders">0</div>
+        <div class="stat-sub">unique wallets paid</div>
+      </div>
+      <div class="card stat">
+        <div class="stat-label">ROOTS buried · all time</div>
+        <div class="stat-value orange" id="st-burned">…</div>
+        <div class="stat-sub" id="st-burned-sub">read from the ROOTS mint</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="jobs">
+  <div class="wrap">
+    <div class="eyebrow">02 · How he works</div>
+    <h2>One mole. Four jobs.</h2>
+    <p class="section-lead">Every $MOLERO buy and sell pays a 2% creator fee. The verified XMR ROOTS program splits it, and the mole carries every piece to where it belongs.</p>
+    <div class="jobs">
+      <div class="card job">
+        <div class="job-ico" data-icon="settle"></div>
+        <div class="job-pct">2%</div>
+        <h3>Collect</h3>
+        <p>He pops up on the Solana surface, grabs the creator fees from trading and drags them down into the coin's own program vault.</p>
+      </div>
+      <div class="card job">
+        <div class="job-ico" data-icon="claim"></div>
+        <div class="job-pct">40%</div>
+        <h3>Deliver</h3>
+        <p>Holder mode. Snapshots are taken, and the mole tunnels wXMR straight to every eligible wallet holding at least $20. You don't need to claim anything.</p>
+      </div>
+      <div class="card job">
+        <div class="job-ico" data-icon="liquidity"></div>
+        <div class="job-pct">35%</div>
+        <h3>Feed the roots</h3>
+        <p>Deepens the shared ROOTS/wXMR liquidity pool. The new LP tokens get burned, so those roots never get pulled.</p>
+      </div>
+      <div class="card job">
+        <div class="job-ico" data-icon="burn"></div>
+        <div class="job-pct">25%</div>
+        <h3>Bury</h3>
+        <p>Buys back ROOTS and buries it forever. Every burn is a real Solana transaction you can check.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="calc">
+  <div class="wrap">
+    <div class="eyebrow">03 · Rewards</div>
+    <h2>How much does he carry?</h2>
+    <p class="section-lead">Pick a trading volume and see where the mole takes the fees.</p>
+    <div class="calc">
+      <div class="card calc-in">
+        <label for="vol">$MOLERO trading volume (USD)</label>
+        <div class="calc-input"><span>$</span><input id="vol" type="number" min="0" step="100" value="100000" inputmode="numeric"></div>
+        <div class="chips">
+          <button class="chip" data-v="10000" type="button">$10K</button>
+          <button class="chip" data-v="100000" type="button">$100K</button>
+          <button class="chip" data-v="1000000" type="button">$1M</button>
+          <button class="chip" data-v="10000000" type="button">$10M</button>
+        </div>
+        <p class="calc-note">These numbers only illustrate the XMR ROOTS fee split. They aren't a forecast. Payouts depend on real volume, the keeper and network conditions. Holder snapshots need at least $20 of $MOLERO per wallet and start once the reward budget reaches 0.001 wXMR (at most once an hour).</p>
+      </div>
+      <div class="card calc-out">
+        <div class="row"><span>Total creator fee · 2%</span><b id="c-total">$2,000</b></div>
+        <div class="row hl"><span><i class="key k-hold"></i>To holders in wXMR · 40%</span><b id="c-hold">$800</b></div>
+        <div class="row"><span><i class="key k-liq"></i>ROOTS/wXMR liquidity · 35%</span><b id="c-liq">$700</b></div>
+        <div class="row"><span><i class="key k-burn"></i>ROOTS buried · 25%</span><b id="c-burn">$500</b></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tunnel">
+  <div class="wrap">
+    <div class="eyebrow">04 · Dig in</div>
+    <h2>Tunnel in. Tunnel out.</h2>
+    <p class="section-lead">Solana is a glass house: everybody sees everything. The mole helps you in, pays you, and digs you a way back out to real Monero.</p>
+    <div class="steps">
+      <div class="card step"><h3>Get a wallet</h3><p>Install Phantom or Solflare and keep a little SOL for network fees.</p></div>
+      <div class="card step"><h3>Bring XMR in</h3><p>Turn native XMR into wXMR on the <a href="https://xmrroots.xyz/move.html" target="_blank" rel="noopener">XMR ROOTS Move page</a>.</p></div>
+      <div class="card step"><h3>Buy $MOLERO</h3><p>Find $MOLERO on <a href="https://xmrroots.xyz/coins.html" target="_blank" rel="noopener" id="buy-step">XMR ROOTS</a> and buy with wXMR.</p></div>
+      <div class="card step"><h3>Hold ≥ $20</h3><p>The mole brings wXMR rewards from every snapshot straight to your wallet.</p></div>
+      <div class="card step"><h3>Tunnel out</h3><p>Cash wXMR back out to native Monero. Down there, nobody can see you.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="abyss">
+  <div class="wrap">
+    <svg class="eyes" viewBox="0 0 120 30" aria-hidden="true">
+      <ellipse cx="34" cy="15" rx="20" ry="9" fill="#8dffbe"/><circle cx="38" cy="15" r="5" fill="#0b2a18"/>
+      <ellipse cx="86" cy="15" rx="20" ry="9" fill="#8dffbe"/><circle cx="90" cy="15" r="5" fill="#0b2a18"/>
+    </svg>
+    <h2>Down here,<br>nobody sees you.</h2>
+    <p>Except the mole. And he's wearing sunglasses.</p>
+    <a class="btn btn-primary" id="buy-bottom" href="https://xmrroots.xyz/coins.html" target="_blank" rel="noopener">Dig in · Buy $MOLERO</a>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p><b style="color:var(--muted)">$MOLERO</b> is a community meme coin launched on XMR ROOTS. It has no intrinsic value and no promise of returns, and it is not investment advice. It is not affiliated with the Monero Project, wxmr.io or pump.fun.</p>
+    <p>wXMR is a wrapped token that depends on its bridge provider's custody. Transactions on Solana are public and don't inherit Monero's privacy. Holder rewards depend on the XMR ROOTS keeper and its published snapshots. The XMR ROOTS program can be upgraded by its operator. Only buy what you can afford to lose.</p>
+  </div>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script src="mole.js"></script>
+<script src="scene.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
