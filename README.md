@@ -9,7 +9,8 @@ out the coin's on-chain fee splits, holder payouts, burns and liquidity.
 2. Project → Settings → Environment Variables:
    - `HELIUS_API_KEY`: your Helius key. It is only used by the server function and never reaches the browser.
    - `MOLERO_MINT`: the $MOLERO mint address once launched. Leave it empty before launch to show every XMR ROOTS coin.
-   - `MOLERO_PAIR`: `wXMR` (default) or `ROOTS`.
+   - `MOLERO_PAIR`: `wXMR` (default) or `ROOTS`; must match the pair the coin was launched with (rewards are paid in it).
+   - `INDEX_FROM`: the launch day as an ISO date, e.g. `2026-11-10T00:00:00Z`. Every server instance starts the index there, so all visitors get the same burrows.
 3. Optional but recommended: Storage → create a Blob store and connect it to the project.
    This keeps the index (burrow order, counters) across cold starts. Vercel adds `BLOB_READ_WRITE_TOKEN` automatically.
 4. Redeploy after changing variables.

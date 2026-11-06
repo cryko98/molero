@@ -461,7 +461,7 @@ $('btn-speed').addEventListener('click', () => {
 // With the Vercel function deployed, every visitor plays the same server-side
 // timeline: the same events at the same moments, and every wallet in the same
 // burrow. Without it (e.g. a plain static host) the page reads the chain itself.
-const TL = { offset: null, maxSeq: 0, pending: [], jobs: new Map() };
+const TL = { offset: null, pending: [], known: new Set() };
 const serverNow = () => Date.now() + (TL.offset || 0);
 
 async function fetchTimeline() {
@@ -517,11 +517,16 @@ setInterval(() => {
   }
 }, 200);
 
+function liveStatus(d) {
+  if (d.indexing) setStatus('poll', 'Building the burrow · ' + d.indexing.toLocaleString('en-US') + ' transactions to go');
+  else setStatus('live', 'LIVE · the same burrow for every visitor');
+}
+
 function startTimeline(data) {
   Burrow.setClock(serverNow);
   $('btn-demo').hidden = true;
   $('btn-speed').hidden = true;
-  setStatus('live', 'LIVE · the same burrow for every visitor');
+  liveStatus(data);
   ['st-jobs', 'st-rewards', 'st-holders'].forEach((id) => {
     const sub = $(id).nextElementSibling;
     if (sub) sub.textContent = id === 'st-holders' ? 'wallets with a burrow' : 'since indexing began';
@@ -533,6 +538,7 @@ function startTimeline(data) {
   Object.entries(data.pairs || {}).forEach(([m, p]) => rememberPair(m, p));
 
   const now = serverNow();
+  data.events.forEach((ev) => TL.known.add(ev.id));
   const jobs = data.events.map((ev) => timelineJob(ev, data.mint ? data.pair : null));
   const done = jobs.filter((j) => j.playAt + j.dur <= now);
   const later = jobs.filter((j) => j.playAt + j.dur > now);
@@ -551,16 +557,15 @@ function startTimeline(data) {
   if (!done.length) Burrow.apply({ kind: 'other', after: data.counters });
   done.slice(-30).forEach((j) => addFeed(j));
   later.forEach(schedule);
-  TL.maxSeq = data.head;
   renderTotals(data);
 
   setInterval(async () => {
     try {
       const d = await fetchTimeline();
-      d.events.filter((ev) => ev.seq > TL.maxSeq).forEach((ev) => schedule(timelineJob(ev, d.mint ? d.pair : null)));
-      TL.maxSeq = Math.max(TL.maxSeq, d.head);
+      // events are keyed by transaction, so any server instance's answer merges cleanly
+      d.events.filter((ev) => !TL.known.has(ev.id)).forEach((ev) => { TL.known.add(ev.id); schedule(timelineJob(ev, d.mint ? d.pair : null)); });
       renderTotals(d);
-      setStatus('live', 'LIVE · the same burrow for every visitor');
+      liveStatus(d);
     } catch { setStatus('poll', 'Reconnecting to the burrow…'); }
   }, 5000);
 

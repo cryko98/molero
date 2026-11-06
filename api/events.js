@@ -15,19 +15,22 @@
 //   BLOB_READ_WRITE_TOKEN optional; set automatically when a Vercel Blob store
 //                         is connected, keeps the index across cold starts
 //   SOLANA_RPC_URL        optional RPC override (testing / other providers)
-//   MAX_BACKFILL          optional, transactions read on a first build (2000)
+//   INDEX_FROM            optional ISO date the index starts at (e.g. the launch day);
+//                         default: midnight UTC of the previous day
+//   MAX_BACKFILL          optional cap on transactions read on a first build (5000)
 
 const PROGRAM = '9RSfkTWckTiuCQTae86bgqZWumcLcj4fzDLxi9qNoVeM';
 const WXMR = 'WXMRyRZhsa19ety5erZhHg4N3xj3EVN92u94422teJp';
 const ROOTS = '4PbxcLPioEQNQT8jCdTnvfM2CddTzHrDStnxniRypump';
 
-const STATE_VERSION = 1;
+const STATE_VERSION = 2;
 const BLOB_PATH = 'molero/state.json';
 const KEEP_EVENTS = 400;      // events kept in state
 const SEND_EVENTS = 160;      // events sent to the browser
 const SLOTS = 240;            // holder burrows (40 levels of 6)
 const DELAY = 8000;           // ms between the block time and playback, so every cache window has it
 const PERSIST_EVERY = 10 * 60 * 1000;
+const BUDGET_MS = 30000;      // indexing time per request, well inside maxDuration
 // how long each job takes at normal pace; the scene fits its animation into this
 const BASE_MS = { settle: 20000, epoch: 5000, claim: 9000, claimNew: 12500, burn: 7500, liquidity: 9000, other: 3000 };
 
@@ -37,65 +40,61 @@ const env = (k, d = '') => (process.env[k] || d).trim();
 const MINT = env('MOLERO_MINT');
 const PAIR = env('MOLERO_PAIR', 'wXMR') === 'ROOTS' ? 'ROOTS' : 'wXMR';
 const RPC = env('SOLANA_RPC_URL') || (env('HELIUS_API_KEY') ? `https://mainnet.helius-rpc.com/?api-key=${env('HELIUS_API_KEY')}` : '');
-const MAX_BACKFILL = +env('MAX_BACKFILL', '2000') || 2000;
+const MAX_BACKFILL = +env('MAX_BACKFILL', '5000') || 5000;
+// every instance starts the index at the same moment, so all of them agree
+// on burrow order and timing even before a shared Blob state exists
+const INDEX_FROM = Date.parse(env('INDEX_FROM')) || (Math.floor(Date.now() / 86400000) - 1) * 86400000;
 
 // ---------- RPC ----------
+// Paced to stay under the provider's request rate (Helius free plan: ~10/s);
+// a JSON-RPC batch of n calls counts as n requests.
+const RPS = +env('RPC_RPS', '8') || 8;
+let nextSlot = 0;
+async function pace(n) {
+  const now = Date.now();
+  const at = Math.max(now, nextSlot);
+  nextSlot = at + (n * 1000) / RPS;
+  if (at > now) await sleep(at - now);
+}
 let rpcId = 0;
-async function rpc(method, params) {
+async function post(body, n) {
   for (let i = 0; i < 4; i++) {
-    const res = await fetch(RPC, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, params }),
-    });
-    if (res.status === 429) { await sleep(600 * (i + 1)); continue; }
-    const j = await res.json();
-    if (j.error) throw new Error(method + ': ' + j.error.message);
-    return j.result;
+    await pace(n);
+    const res = await fetch(RPC, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    if (res.status === 429) { await sleep(1000 * (i + 1)); continue; }
+    if (!res.ok) throw new Error('rpc http ' + res.status);
+    return res.json();
   }
-  throw new Error(method + ': rate limited');
+  throw new Error('rate limited');
+}
+async function rpc(method, params) {
+  const j = await post({ jsonrpc: '2.0', id: ++rpcId, method, params }, 1);
+  if (j.error) throw new Error(method + ': ' + j.error.message);
+  return j.result;
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Fetch many transactions: JSON-RPC batches where the provider supports them,
-// otherwise single calls with a little concurrency.
+// Fetch transactions in small paced batches; single calls if batching is refused.
+const TX_PARAMS = { encoding: 'json', maxSupportedTransactionVersion: 0, commitment: 'confirmed' };
+let batching = true;
 async function getTransactions(sigs) {
   const out = new Map();
-  const params = (s) => [s, { encoding: 'json', maxSupportedTransactionVersion: 0, commitment: 'confirmed' }];
-  const chunks = [];
-  for (let i = 0; i < sigs.length; i += 50) chunks.push(sigs.slice(i, i + 50));
-  // three batches in flight at a time
-  for (let c = 0; c < chunks.length; c += 3) await Promise.all(chunks.slice(c, c + 3).map(fetchChunk));
-  return out;
-
-  async function fetchChunk(chunk) {
-    let ok = false;
+  if (batching) {
     try {
-      const res = await fetch(RPC, {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(chunk.map((s, k) => ({ jsonrpc: '2.0', id: k, method: 'getTransaction', params: params(s) }))),
-      });
-      if (res.ok) {
-        const arr = await res.json();
-        if (Array.isArray(arr)) {
-          ok = true;
-          for (const r of arr) if (r && r.result) out.set(chunk[r.id], r.result);
-          // retry the ones a batch dropped
-          for (const s of chunk) if (!out.has(s)) { try { const t = await rpc('getTransaction', params(s)); if (t) out.set(s, t); } catch {} }
-        }
-      }
-    } catch { /* fall through to single calls */ }
-    if (!ok) {
-      for (let k = 0; k < chunk.length; k += 4) {
-        await Promise.all(chunk.slice(k, k + 4).map(async (s) => {
-          try { const t = await rpc('getTransaction', params(s)); if (t) out.set(s, t); } catch {}
-        }));
-      }
-    }
+      const arr = await post(sigs.map((s, k) => ({ jsonrpc: '2.0', id: k, method: 'getTransaction', params: [s, TX_PARAMS] })), sigs.length);
+      if (Array.isArray(arr)) { for (const r of arr) if (r && r.result) out.set(sigs[r.id], r.result); }
+      else batching = false;
+    } catch (e) { if (!/rate limited/.test(e.message)) batching = false; else throw e; }
   }
+  for (const s of sigs) {
+    if (out.has(s)) continue;
+    try { const t = await rpc('getTransaction', [s, TX_PARAMS]); if (t) out.set(s, t); } catch {}
+  }
+  return out;
 }
 
 // New signatures of the program since `until`, oldest first.
-async function newSignatures(until, max) {
+async function newSignatures(until, max, fromMs) {
   const all = [];
   let before;
   while (all.length < max) {
@@ -106,9 +105,10 @@ async function newSignatures(until, max) {
     if (!page || !page.length) break;
     all.push(...page);
     if (page.length < 1000) break;
+    if (fromMs && page[page.length - 1].blockTime * 1000 < fromMs) break;
     before = page[page.length - 1].signature;
   }
-  return all.slice(0, max).filter((s) => !s.err).reverse();
+  return all.slice(0, max).filter((s) => !s.err && (!fromMs || s.blockTime * 1000 >= fromMs)).reverse();
 }
 
 // ---------- parsing ----------
@@ -136,7 +136,7 @@ function kindOf(type) {
 // ---------- state ----------
 function freshState() {
   return {
-    v: STATE_VERSION, mint: MINT, lastSig: null, seq: 0, events: [],
+    v: STATE_VERSION, mint: MINT, cursor: null, backlog: [], from: INDEX_FROM, seq: 0, events: [],
     slots: [], holders: {}, nextHolder: 0, pairs: {}, coinAccount: '',
     counters: { pile: 9, stash: 0 }, totals: { jobs: 0, rewards: {}, holders: 0 }, lastEnd: 0,
   };
@@ -186,10 +186,10 @@ function slotFor(st, addr) {
   return { slot, isNew: true };
 }
 
-function addEvent(st, sig, time, e) {
+function addEvent(st, sig, time, e, k) {
   const coin = e.f.mint || e.f.source || e.f.coin || '';
   const kind = kindOf(e.type);
-  const ev = { seq: ++st.seq, sig, time, type: e.type, f: e.f, coin, pair: st.mint ? PAIR : (st.pairs[coin] || null) };
+  const ev = { id: sig + ':' + k, seq: ++st.seq, sig, time, type: e.type, f: e.f, coin, pair: st.mint ? PAIR : (st.pairs[coin] || null) };
   let base = BASE_MS[kind] || BASE_MS.other;
 
   if (kind === 'settle') {
@@ -223,21 +223,33 @@ function addEvent(st, sig, time, e) {
   st.events.push(ev);
 }
 
-async function update(st) {
-  const sigs = await newSignatures(st.lastSig, st.lastSig ? 5000 : MAX_BACKFILL);
-  if (!sigs.length) return false;
-  const txs = await getTransactions(sigs.map((s) => s.signature));
-  for (const s of sigs) {
-    const tx = txs.get(s.signature);
-    if (!tx || tx.meta.err) continue;
-    const evs = parseHR(tx.meta.logMessages);
-    if (!evs.length) continue;
-    learn(st, tx, evs);
-    for (const e of evs) if (ours(st, e)) addEvent(st, s.signature, tx.blockTime || s.blockTime, e);
+// Index in steps: new signatures join a backlog that is worked off oldest first
+// within a time budget, so no request runs into the function timeout and a long
+// first build simply continues on the next requests.
+async function update(st, budgetMs) {
+  const until = Date.now() + budgetMs;
+  const fresh = await newSignatures(st.cursor, st.cursor ? 5000 : MAX_BACKFILL, st.cursor ? 0 : st.from);
+  if (fresh.length) {
+    st.cursor = fresh[fresh.length - 1].signature;
+    for (const s of fresh) st.backlog.push([s.signature, s.blockTime]);
   }
-  st.lastSig = sigs[sigs.length - 1].signature;
+  let changed = fresh.length > 0;
+  while (st.backlog.length && Date.now() < until) {
+    const chunk = st.backlog.slice(0, 8);
+    const txs = await getTransactions(chunk.map((c) => c[0]));
+    for (const [sig, bt] of chunk) {
+      const tx = txs.get(sig);
+      if (!tx || tx.meta.err) continue;
+      const evs = parseHR(tx.meta.logMessages);
+      if (!evs.length) continue;
+      learn(st, tx, evs);
+      evs.forEach((e, k) => { if (ours(st, e)) addEvent(st, sig, tx.blockTime || bt, e, k); });
+    }
+    st.backlog.splice(0, chunk.length);
+    changed = true;
+  }
   if (st.events.length > KEEP_EVENTS) st.events = st.events.slice(-KEEP_EVENTS);
-  return true;
+  return changed;
 }
 
 // ---------- persistence (optional Vercel Blob) ----------
@@ -252,7 +264,7 @@ async function loadState() {
     const meta = await b.head(BLOB_PATH);
     const r = await fetch(meta.url + '?t=' + Date.now(), { cache: 'no-store' });
     const st = await r.json();
-    return st && st.v === STATE_VERSION && st.mint === MINT ? st : null;
+    return st && st.v === STATE_VERSION && st.mint === MINT && (!env('INDEX_FROM') || st.from === INDEX_FROM) ? st : null;
   } catch { return null; }
 }
 async function saveState(st) {
@@ -267,8 +279,11 @@ async function saveState(st) {
 let memo = null, savedAt = 0, inflight = null;
 async function current() {
   if (!memo) memo = (await loadState()) || freshState();
-  const changed = await update(memo);
-  if (changed && Date.now() - savedAt > PERSIST_EVERY) { savedAt = Date.now(); await saveState(memo); }
+  const wasBuilding = memo.backlog.length > 0;
+  const changed = await update(memo, BUDGET_MS);
+  // save often while the first build is under way, then every few minutes
+  const interval = wasBuilding ? 0 : PERSIST_EVERY;
+  if (changed && Date.now() - savedAt > interval) { savedAt = Date.now(); await saveState(memo); }
   return memo;
 }
 
@@ -285,7 +300,7 @@ export default async function handler(req, res) {
       now: Date.now(), mint: st.mint, pair: PAIR, head: st.seq,
       events: st.events.slice(-SEND_EVENTS),
       slots: st.slots.map((s, i) => (s ? [i, s.a, s.n, s.last, s.p || null] : null)).filter(Boolean),
-      counters: st.counters, totals: st.totals, pairs: st.pairs,
+      counters: st.counters, totals: st.totals, pairs: st.pairs, indexing: st.backlog.length,
     };
     res.statusCode = 200;
     res.setHeader('content-type', 'application/json');
