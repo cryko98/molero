@@ -686,9 +686,9 @@
       pulse(R.liq, ms); pulse(R.extra, ms);
       pulse(R.buyback, ms);
       await pulse(R.rewards, ms);
-      pileCount = Math.min(24, pileCount + 3); drawPile();
+      setPile(j.after ? j.after.pile : pileCount + 3);
       say(PILE.x, CH.treasury.y - 64, '+ ' + j.rewards + ' rewards', '#9b7cf0');
-      stashN++; stashCount.textContent = stashN + ' queued';
+      setStash(j.after ? j.after.stash : stashN + 1);
       say(STASH.x, STASH.y - 56, '+ ' + j.buyback + ' buyback', '#d4a52a');
       splash(CH.pool.x + 40, poolLevel);
       poolLevel = Math.max(CH.pool.y - 6, poolLevel - 1.5);
@@ -713,9 +713,10 @@
       await goTo('treasury');
       M.dir = 1;
       await fly('coin', { x: PILE.x, y: PILE.y - 8 }, handsPos(), 380, 40);
-      pileCount = Math.max(3, pileCount - 1); drawPile();
+      setPile(j.after ? j.after.pile : pileCount - 1);
       setCarry(['coin'], j.amount);
-      const room = roomFor(j.recipient);
+      const room = j.slot != null ? roomAt(j.slot, j.recipient) : roomFor(j.recipient);
+      if (j.n) setRoomCoins(room, j.n - 1);
       openRoom(room);
       await goTo(room.node);
       M.dir = room.x > SHAFT_X ? 1 : -1; M.toss = 1;
@@ -734,7 +735,7 @@
     async burn(j) {
       await goTo('furnace');
       M.dir = -1;
-      if (stashN > 0) { stashN--; stashCount.textContent = stashN ? stashN + ' queued' : ''; }
+      setStash(j.after ? j.after.stash : stashN - 1);
       await fly('roots', { x: STASH.x, y: STASH.y - 14 }, handsPos(), 360, 30);
       setCarry(['roots'], j.amount);
       M.dir = 1;
@@ -812,6 +813,65 @@
     el('ellipse', { cx: x, cy: y, rx: 8, ry: 3.6, fill: '#ff7a1a', stroke: '#c94f02', 'stroke-width': 1 }, r.coins);
     r.coinsN++;
   }
+  function setRoomCoins(r, n) {
+    r.coins.innerHTML = ''; r.coinsN = 0;
+    for (let i = 0; i < Math.min(6, n); i++) addRoomCoin(r);
+  }
+
+  // Shared-timeline mode: the server gives every holder a fixed slot, so the
+  // same wallet lives in the same burrow for every visitor.
+  function roomAt(slot, addr) {
+    while (roomEls.length <= slot && levels.length < MAX_LEVELS) addLevel();
+    const r = roomEls[Math.min(slot, roomEls.length - 1)];
+    if (r.owner !== addr) {
+      r.owner = addr;
+      r.plate.textContent = addr.length > 12 ? addr.slice(0, 4) + '…' + addr.slice(-4) : addr;
+      r.amt.textContent = '';
+      setRoomCoins(r, 0);
+    }
+    r.used = Date.now();
+    return r;
+  }
+  function markDug(e) {
+    if (!e || e.dug) return;
+    e.dug = true;
+    e.outer.removeAttribute('stroke-dasharray');
+    e.inner.removeAttribute('stroke-dasharray');
+  }
+  // open a burrow at once (no digging animation): shaft down to its level, corridor to it
+  function digInstant(r) {
+    const L = +r.node.slice(1, r.node.indexOf('_'));
+    markDug(edgeBetween('treasury', 'h0'));
+    for (let k = 1; k <= L; k++) markDug(edgeBetween('h' + (k - 1), 'h' + k));
+    for (let n = r; n; n = roomEls.find((x) => x.node === n.prev)) markDug(edgeBetween(n.prev, n.node));
+    r.open = true;
+    r.shape.forEach((s) => s.setAttribute('opacity', 1));
+    r.g.setAttribute('opacity', 1);
+  }
+  function lightRoom(r) {
+    r.lamp.setAttribute('fill', '#ffd27a');
+    r.lightEl.setAttribute('rx', 76); r.lightEl.setAttribute('ry', 60);
+  }
+  function setPile(n) { pileCount = clamp(n, 3, 24); drawPile(); }
+  function setStash(n) { stashN = Math.max(0, n); stashCount.textContent = stashN ? stashN + ' queued' : ''; }
+  const END_NODE = { settle: 'vault', epoch: 'treasury', burn: 'furnace', liquidity: 'pool', other: 'vault' };
+
+  // the result of a job without its animation, for events that already played
+  function apply(j) {
+    let node = END_NODE[j.kind] || 'vault';
+    if (j.kind === 'claim' && j.recipient && j.slot != null) {
+      const r = roomAt(j.slot, j.recipient);
+      digInstant(r);
+      setRoomCoins(r, j.n || r.coinsN + 1);
+      r.amt.textContent = '+' + j.amount;
+      lightRoom(r);
+      node = r.node;
+    }
+    if (j.kind === 'settle') poolLevel = Math.max(CH.pool.y - 6, poolLevel - 1.5);
+    if (j.after) { setPile(j.after.pile); setStash(j.after.stash); }
+    at = node; idleOffset = 0; idleTarget = 0;
+    M.x = N[at].x; M.y = N[at].y;
+  }
 
   // ---------- camera ----------
   // the view is a window onto the world that scrolls down after the mole
@@ -840,10 +900,14 @@
     lastT = now;
     const t = now / 1000;
 
+    // idle strolls follow the shared clock, so every visitor sees the same wander
     if (!walking && !busy) {
-      if (Math.abs(idleOffset - idleTarget) < 0.5 && Math.random() < dt * 0.35) {
+      const tick = Math.floor(clock() / 3500);
+      if (tick !== idleTick) {
+        idleTick = tick;
         const room = /^r/.test(at) ? 24 : at === 'surf' ? 30 : 44;
-        idleTarget = rand(-room, room);
+        const h = Math.sin(tick * 12.9898 + at.length * 78.233) * 43758.5453;
+        idleTarget = ((h - Math.floor(h)) * 2 - 1) * room;
       }
     }
     if (!walking) {
@@ -910,23 +974,38 @@
   const queue = [];
   let busy = false;
   const listeners = { start: [], end: [] };
+  let baseSpeed = 1, deadline = 0;
   async function pump() {
     if (busy) return;
     busy = true;
     while (queue.length) {
       const job = queue.shift();
       listeners.start.forEach((f) => f(job));
+      // a job on the shared timeline runs at its scheduled pace and must be
+      // done by its deadline; if it falls behind, the mole hurries up
+      deadline = job.deadline || 0;
+      speedMul = baseSpeed * (job.speed || 1);
       try { await (JOBS[job.kind] || JOBS.other)(job); } catch (e) { console.error(e); }
       setCarry([]);
+      deadline = 0;
+      speedMul = baseSpeed;
       listeners.end.forEach((f) => f(job));
     }
     busy = false;
   }
+  setInterval(() => {
+    if (busy && deadline && performance.now() > deadline - 600) speedMul = Math.min(10, speedMul * 1.35);
+  }, 150);
+
+  let idleTick = -1;
+  let clock = () => Date.now();
 
   window.Burrow = {
     enqueue(job) { queue.push(job); pump(); },
+    apply(job) { apply(job); },
     on(evt, fn) { listeners[evt].push(fn); },
     get busy() { return busy || queue.length > 0; },
-    setSpeed(m) { speedMul = m; },
+    setSpeed(m) { baseSpeed = m; if (!busy) speedMul = m; },
+    setClock(fn) { clock = fn; },
   };
 })();

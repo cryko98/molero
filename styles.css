@@ -318,3 +318,6 @@ footer p { margin: 6px 0; max-width: 900px; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 .hill-front ellipse { opacity: .55; }
+[hidden] { display: none !important; }
+.feed-item.upcoming { opacity: .5; }
+.feed-item.upcoming .feed-meta span:first-child::after { content: " · up next"; color: var(--orange); }

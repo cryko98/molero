@@ -1,0 +1,9 @@
+{
+  "name": "molero",
+  "private": true,
+  "type": "module",
+  "description": "$MOLERO site with a live, shared XMR ROOTS burrow",
+  "dependencies": {
+    "@vercel/blob": "2.8.2"
+  }
+}

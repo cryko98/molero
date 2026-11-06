@@ -457,12 +457,134 @@ $('btn-speed').addEventListener('click', () => {
   $('btn-speed').textContent = 'Speed ' + SPEEDS[speedIdx] + '×';
 });
 
+// ---------- shared timeline (via /api/events) ----------
+// With the Vercel function deployed, every visitor plays the same server-side
+// timeline: the same events at the same moments, and every wallet in the same
+// burrow. Without it (e.g. a plain static host) the page reads the chain itself.
+const TL = { offset: null, maxSeq: 0, pending: [], jobs: new Map() };
+const serverNow = () => Date.now() + (TL.offset || 0);
+
+async function fetchTimeline() {
+  const t0 = Date.now();
+  const res = await fetch('/api/events', { cache: 'no-store' });
+  if (!res.ok) throw new Error('timeline ' + res.status);
+  const data = await res.json();
+  const t1 = Date.now();
+  // a cached response is `Age` seconds older than its `now`
+  const age = +(res.headers.get('age') || 0) * 1000;
+  const est = data.now + age + (t1 - t0) / 2 - t1;
+  TL.offset = TL.offset == null ? est : TL.offset * 0.8 + est * 0.2;
+  return data;
+}
+
+function timelineJob(ev, fallbackPair) {
+  if (ev.coin && (ev.pair || fallbackPair)) rememberPair(ev.coin, ev.pair || fallbackPair);
+  const job = toJob({ type: ev.type, f: ev.f }, ev.sig, ev.time);
+  return Object.assign(job, { seq: ev.seq, slot: ev.slot, n: ev.n, isNew: ev.isNew, after: ev.after, playAt: ev.playAt, dur: ev.dur, speed: ev.speed });
+}
+
+function renderTotals(data) {
+  stats.jobs = data.totals.jobs;
+  $('st-jobs').textContent = data.totals.jobs.toLocaleString('en-US');
+  $('feed-count').textContent = data.totals.jobs.toLocaleString('en-US');
+  const parts = Object.entries(data.totals.rewards || {}).map(([p, raw]) => {
+    const v = raw / 10 ** DECIMALS[p];
+    return (v < 1 ? v.toPrecision(3) : v.toLocaleString('en-US', { maximumFractionDigits: 2 })) + ' ' + p;
+  });
+  $('st-rewards').textContent = parts.length ? parts.join(' + ') : '0';
+  $('st-holders').textContent = data.totals.holders.toLocaleString('en-US');
+}
+
+function schedule(job) {
+  addFeed(job);
+  job.li.classList.add('upcoming');
+  TL.pending.push(job);
+  TL.pending.sort((a, b) => a.playAt - b.playAt);
+}
+
+// start each job when the shared clock reaches it; jobs whose slot is already
+// over (tab was asleep) are applied without animation so the scene stays in sync
+setInterval(() => {
+  if (document.hidden) return; // a hidden tab doesn't animate; see the visibility handler
+  const now = serverNow();
+  while (TL.pending.length && TL.pending[0].playAt <= now) {
+    const job = TL.pending.shift();
+    job.li && job.li.classList.remove('upcoming');
+    const end = job.playAt + job.dur;
+    if (end < now - 1500) { Burrow.apply(job); continue; }
+    job.deadline = performance.now() + (end - now);
+    Burrow.enqueue(job);
+  }
+}, 200);
+
+function startTimeline(data) {
+  Burrow.setClock(serverNow);
+  $('btn-demo').hidden = true;
+  $('btn-speed').hidden = true;
+  setStatus('live', 'LIVE · the same burrow for every visitor');
+  ['st-jobs', 'st-rewards', 'st-holders'].forEach((id) => {
+    const sub = $(id).nextElementSibling;
+    if (sub) sub.textContent = id === 'st-holders' ? 'wallets with a burrow' : 'since indexing began';
+  });
+  if (data.mint && !CONFIG.TOKEN_MINT) {
+    CONFIG.TOKEN_MINT = data.mint;
+    $('watching').innerHTML = 'Watching <b>$MOLERO</b> · ' + short(data.mint);
+  }
+  Object.entries(data.pairs || {}).forEach(([m, p]) => rememberPair(m, p));
+
+  const now = serverNow();
+  const jobs = data.events.map((ev) => timelineJob(ev, data.mint ? data.pair : null));
+  const done = jobs.filter((j) => j.playAt + j.dur <= now);
+  const later = jobs.filter((j) => j.playAt + j.dur > now);
+
+  // burrows as they were before the jobs that haven't played yet
+  const pendingNew = new Set(later.filter((j) => j.kind === 'claim' && j.isNew).map((j) => j.recipient));
+  const pendingCount = {};
+  later.forEach((j) => { if (j.kind === 'claim') pendingCount[j.recipient] = (pendingCount[j.recipient] || 0) + 1; });
+  for (const [slot, addr, n, last, p] of data.slots) {
+    if (pendingNew.has(addr)) continue;
+    const pair = p || data.pair;
+    Burrow.apply({ kind: 'claim', recipient: addr, slot, n: n - (pendingCount[addr] || 0), amount: amount(last, null, pair) });
+  }
+  // replay finished jobs instantly (budgets, mole position), then the feed
+  done.forEach((j) => Burrow.apply(j));
+  if (!done.length) Burrow.apply({ kind: 'other', after: data.counters });
+  done.slice(-30).forEach((j) => addFeed(j));
+  later.forEach(schedule);
+  TL.maxSeq = data.head;
+  renderTotals(data);
+
+  setInterval(async () => {
+    try {
+      const d = await fetchTimeline();
+      d.events.filter((ev) => ev.seq > TL.maxSeq).forEach((ev) => schedule(timelineJob(ev, d.mint ? d.pair : null)));
+      TL.maxSeq = Math.max(TL.maxSeq, d.head);
+      renderTotals(d);
+      setStatus('live', 'LIVE · the same burrow for every visitor');
+    } catch { setStatus('poll', 'Reconnecting to the burrow…'); }
+  }, 5000);
+
+  // Browsers stop animating hidden tabs. Coming back after missing part of the
+  // timeline, rebuild from the shared state instead of replaying a backlog.
+  let hiddenAt = 0, missed = false;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { hiddenAt = Date.now(); missed = false; return; }
+    if (hiddenAt && missed && Date.now() - hiddenAt > 8000) location.reload();
+    hiddenAt = 0;
+  });
+  setInterval(() => { if (document.hidden && TL.pending.length && TL.pending[0].playAt <= serverNow()) missed = true; }, 1000);
+}
+
 // ---------- start ----------
+function startDirect() {
+  connectWs();
+  poll(CONFIG.BACKFILL);
+  setInterval(() => { if (!wsOpen) poll(10); }, 15000);
+  // If nothing real shows up soon, play one demo cycle so visitors see what the mole does.
+  setTimeout(() => { if (!stats.jobs && !Burrow.busy) demoCycle(); }, 12000);
+}
+
 setStatus('', 'Connecting to Solana…');
-connectWs();
-poll(CONFIG.BACKFILL);
-setInterval(() => { if (!wsOpen) poll(10); }, 15000);
 refreshBurned();
 setInterval(refreshBurned, 120000);
-// If nothing real shows up soon, play one demo cycle so visitors see what the mole does.
-setTimeout(() => { if (!stats.jobs && !Burrow.busy) demoCycle(); }, 12000);
+fetchTimeline().then(startTimeline, startDirect);
