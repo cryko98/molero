@@ -321,3 +321,18 @@ footer p { margin: 6px 0; max-width: 900px; }
 [hidden] { display: none !important; }
 .feed-item.upcoming { opacity: .5; }
 .feed-item.upcoming .feed-meta span:first-child::after { content: " · up next"; color: var(--orange); }
+
+/* ---------- scrollbars ---------- */
+html { scrollbar-color: var(--orange-deep) var(--bg); scrollbar-width: thin; }
+.feed-list { scrollbar-color: #4a3424 transparent; scrollbar-width: thin; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(var(--orange-2), var(--orange-deep));
+  border-radius: 10px; border: 2px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--orange); }
+.feed-list::-webkit-scrollbar { width: 6px; }
+.feed-list::-webkit-scrollbar-track { background: transparent; }
+.feed-list::-webkit-scrollbar-thumb { background: #3a2a1f; border: 0; border-radius: 6px; }
+.feed-list::-webkit-scrollbar-thumb:hover { background: var(--orange-deep); }

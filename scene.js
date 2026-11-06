@@ -40,12 +40,14 @@
   const PILE = { x: 648, y: 578 };
   const STASH = { x: 896, y: 556 };
   const fireBase = { x: 1022, y: 562 };
+  // the liquidity tank standing in the pool chamber (the mole's ledge is to its left)
+  const TANK = { x0: 206, x1: 334, top: 486, bottom: 568 };
 
   const N = {
     surf: { x: 200, y: GROUND - 24 },
     hole: { x: 200, y: GROUND + 34 },
     vault: { x: 528, y: floorY(CH.vault) },
-    pool: { x: 152, y: floorY(CH.pool) },
+    pool: { x: 140, y: floorY(CH.pool) },
     treasury: { x: 556, y: floorY(CH.treasury) },
     furnace: { x: 952, y: floorY(CH.furnace) },
   };
@@ -73,7 +75,7 @@
       <feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     <linearGradient id="metal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4a4a4e"/><stop offset="1" stop-color="#1f1f22"/></linearGradient>
     <clipPath id="under"><rect id="underRect" x="0" y="${GROUND}" width="${W}" height="${H - GROUND}"/></clipPath>
-    <clipPath id="poolClip"><ellipse cx="${CH.pool.x}" cy="${CH.pool.y}" rx="${CH.pool.rx - 3}" ry="${CH.pool.ry - 3}"/></clipPath>
+    <clipPath id="poolClip"><rect x="${TANK.x0 + 6}" y="${TANK.top + 4}" width="${TANK.x1 - TANK.x0 - 12}" height="${TANK.bottom - TANK.top - 12}"/></clipPath>
     <mask id="darkMask" maskUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}">
       <rect id="maskRect" x="0" y="0" width="${W}" height="${H}" fill="#fff"/>
       <g id="lights"></g>
@@ -118,30 +120,91 @@
   // the same two layers so every joint is seamless
   const tunnelOuter = el('g', { fill: 'none', 'stroke-linecap': 'round', 'clip-path': 'url(#under)' }, svg);
   const tunnelInner = el('g', { fill: 'none', 'stroke-linecap': 'round', 'clip-path': 'url(#under)' }, svg);
+  // a slightly lighter, lower core gives every tunnel a dark ceiling and a worn floor
+  const tunnelCore = el('g', { fill: 'none', 'stroke-linecap': 'round', 'clip-path': 'url(#under)' }, svg);
+  const tunnelStones = el('g', { 'clip-path': 'url(#under)' }, svg);
+  const chamberDecor = el('g', {}, svg);
   const edges = [];
   const adj = {};
+  // deterministic noise so every visitor gets the same rocks
+  const noise = (k) => { const v = Math.sin(k * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
   function setReveal(e, s) {
-    for (const p of [e.outer, e.inner]) {
+    for (const p of [e.outer, e.inner, e.core]) {
       // one dash that ends exactly where the mole has dug to
       p.setAttribute('stroke-dasharray', `${e.len + 60} ${e.len + 60}`);
       p.setAttribute('stroke-dashoffset', e.len + 60 - s);
     }
   }
+  // rocks jutting out of both tunnel walls
+  function edgeStones(e, seed) {
+    const g = el('g', { opacity: e.dug ? 1 : 0 }, tunnelStones);
+    for (let s = 10, k = 0; s < e.len - 10; s += 18 + noise(seed + k) * 22, k++) {
+      const p = e.inner.getPointAtLength(s), q = e.inner.getPointAtLength(Math.min(e.len, s + 1));
+      const tl = Math.hypot(q.x - p.x, q.y - p.y) || 1, nx = -(q.y - p.y) / tl, ny = (q.x - p.x) / tl;
+      const side = k % 2 ? 1 : -1, off = 23 + noise(seed + k * 3) * 4;
+      const r = 2.5 + noise(seed + k * 7) * 4;
+      el('ellipse', { cx: (p.x + nx * off * side).toFixed(1), cy: (p.y + ny * off * side).toFixed(1), rx: r * 1.3, ry: r, fill: ['#5c4630', '#6b543c', '#4b3a2c'][k % 3], transform: `rotate(${(noise(seed + k) * 180).toFixed(0)} ${(p.x + nx * off * side).toFixed(1)} ${(p.y + ny * off * side).toFixed(1)})` }, g);
+    }
+    return g;
+  }
   function addEdge(a, b, d, hidden) {
-    const outer = el('path', { d, stroke: '#4a3424', 'stroke-width': 54 }, tunnelOuter);
-    const inner = el('path', { d, stroke: '#140d08', 'stroke-width': 44 }, tunnelInner);
-    const e = { a, b, outer, inner, len: inner.getTotalLength(), dug: !hidden };
+    const outer = el('path', { d, stroke: '#4a3424', 'stroke-width': 56 }, tunnelOuter);
+    const inner = el('path', { d, stroke: '#120b07', 'stroke-width': 44 }, tunnelInner);
+    const core = el('path', { d, stroke: '#1d130c', 'stroke-width': 26, transform: 'translate(0 6)' }, tunnelCore);
+    const e = { a, b, outer, inner, core, len: inner.getTotalLength(), dug: !hidden };
+    e.stones = edgeStones(e, edges.length * 31 + 7);
     if (hidden) setReveal(e, 0);
     edges.push(e);
     (adj[a] = adj[a] || []).push(e);
     (adj[b] = adj[b] || []).push(e);
     return e;
   }
+  function finishDug(e) {
+    e.dug = true;
+    [e.outer, e.inner, e.core].forEach((p) => p.removeAttribute('stroke-dasharray'));
+    e.stones.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 600, fill: 'forwards' });
+  }
   function edgeBetween(a, b) { return edges.find((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a)); }
+
+  // an uneven, rocky outline around an ellipse
+  function rocky(c, pad, amp, seed) {
+    const n = 44;
+    let d = '';
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const k = 1 + (noise(seed + i) - 0.5) * amp + Math.sin(a * 3 + seed) * amp * 0.3;
+      const x = c.x + Math.cos(a) * (c.rx + pad) * k, y = c.y + Math.sin(a) * (c.ry + pad) * k;
+      d += (i ? ' L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1);
+    }
+    return d + ' Z';
+  }
+  let chamberN = 0;
   function chamberShape(c, hidden) {
-    const o = el('ellipse', { cx: c.x, cy: c.y, rx: c.rx + 5, ry: c.ry + 5, fill: '#4a3424', opacity: hidden ? 0 : 1 }, tunnelOuter);
-    const i = el('ellipse', { cx: c.x, cy: c.y, rx: c.rx, ry: c.ry, fill: 'url(#chamberIn)', opacity: hidden ? 0 : 1 }, tunnelInner);
-    return [o, i];
+    const seed = ++chamberN * 53;
+    const op = hidden ? 0 : 1;
+    const o = el('path', { d: rocky(c, 6, 0.1, seed), fill: '#4a3424', opacity: op }, tunnelOuter);
+    const i = el('path', { d: rocky(c, 0, 0.07, seed), fill: 'url(#chamberIn)', opacity: op }, tunnelInner);
+    // dirt floor with pebbles, roots hanging from the ceiling
+    const g = el('g', { opacity: op }, chamberDecor);
+    const clip = el('clipPath', { id: 'ch' + seed }, defs);
+    el('path', { d: rocky(c, 0, 0.07, seed) }, clip);
+    const inside = el('g', { 'clip-path': `url(#ch${seed})` }, g);
+    const fy = c.y + c.ry * 0.42;
+    el('path', { d: `M${c.x - c.rx - 10} ${fy + 4} Q${c.x - c.rx * 0.4} ${fy - 4} ${c.x} ${fy + 1} T${c.x + c.rx + 10} ${fy} L${c.x + c.rx + 10} ${c.y + c.ry + 10} L${c.x - c.rx - 10} ${c.y + c.ry + 10} Z`, fill: '#2a1c12' }, inside);
+    el('path', { d: `M${c.x - c.rx - 10} ${fy + 4} Q${c.x - c.rx * 0.4} ${fy - 4} ${c.x} ${fy + 1} T${c.x + c.rx + 10} ${fy}`, stroke: '#3a2819', 'stroke-width': 2, fill: 'none' }, inside);
+    for (let k = 0; k < c.rx / 9; k++) {
+      const x = c.x - c.rx * 0.9 + noise(seed + k * 5) * c.rx * 1.8, y = fy + 6 + noise(seed + k * 9) * c.ry * 0.5;
+      el('ellipse', { cx: x.toFixed(1), cy: y.toFixed(1), rx: 1.5 + noise(seed + k) * 3, ry: 1 + noise(seed + k * 2) * 2, fill: k % 3 ? '#3f2c1d' : '#55402c' }, inside);
+    }
+    for (let k = 0; k < Math.round(c.rx / 28); k++) {
+      const x = c.x - c.rx * 0.7 + noise(seed + k * 13) * c.rx * 1.4;
+      const top = c.y - c.ry * Math.sqrt(Math.max(0, 1 - ((x - c.x) / c.rx) ** 2)) - 2;
+      const len = 8 + noise(seed + k * 17) * 16;
+      el('path', { d: `M${x.toFixed(1)} ${top.toFixed(1)} q${(noise(k) * 6 - 3).toFixed(1)} ${(len / 2).toFixed(1)} ${(noise(k + 4) * 8 - 4).toFixed(1)} ${len.toFixed(1)}`, stroke: '#5c4330', 'stroke-width': 1.6, fill: 'none', 'stroke-linecap': 'round', opacity: 0.8 }, g);
+    }
+    const parts = [o, i, g];
+    parts.clip = 'ch' + seed;
+    return parts;
   }
 
   addEdge('surf', 'hole', `M200 ${N.surf.y} L200 ${N.hole.y}`);
@@ -150,7 +213,8 @@
   addEdge('hole', 'pool', `M200 ${N.hole.y} C150 300 110 450 ${N.pool.x} ${N.pool.y}`);
   addEdge('pool', 'treasury', `M${N.pool.x} ${N.pool.y} C260 650 440 640 ${N.treasury.x} ${N.treasury.y}`);
   addEdge('treasury', 'furnace', `M${N.treasury.x} ${N.treasury.y} C700 650 860 630 ${N.furnace.x} ${N.furnace.y}`);
-  Object.values(CH).forEach((c) => chamberShape(c));
+  const chamberClip = {};
+  Object.entries(CH).forEach(([k, c]) => { chamberClip[k] = chamberShape(c).clip; });
   el('ellipse', { cx: 200, cy: GROUND + 2, rx: 30, ry: 8, fill: '#0b0705' }, svg);
 
   const world = el('g', {}, svg);
@@ -303,6 +367,11 @@
   // the knot where the fee splits
   el('ellipse', { cx: SPLIT.x, cy: SPLIT.y + 1, rx: 13, ry: 9, fill: BARK, stroke: BARK_DARK, 'stroke-width': 1 }, rootBodies);
   const knotCore = el('circle', { cx: SPLIT.x, cy: SPLIT.y + 1, r: 4, fill: '#ff7a1a' }, rootBodies);
+  // metal collars where the roots pass through the vault door
+  [SAFE.y - 31, SAFE.y + 31].forEach((y) => {
+    el('ellipse', { cx: SAFE.x, cy: y, rx: 11, ry: 4.5, fill: '#3a3a3f', stroke: '#9a9aa0', 'stroke-width': 1.5 }, rootBodies);
+    el('ellipse', { cx: SAFE.x, cy: y - 1, rx: 7, ry: 2, fill: 'none', stroke: '#c8c8ce', 'stroke-width': 0.8, opacity: 0.6 }, rootBodies);
+  });
 
   // small percentage tags next to each root
   ROOTS.forEach((r) => {
@@ -310,10 +379,94 @@
     text(labels, p.x + dx, p.y + dy + 4, r.pct, { 'font-size': 13, 'font-weight': 900, fill: r.color, stroke: '#120c08', 'stroke-width': 4, 'paint-order': 'stroke' });
   });
 
+  // ---------- mine props ----------
+  // timber frames hold up the station ceilings; lanterns hang from the beams
+  const lanterns = [];
+  const ceilingAt = (c, x) => c.y - c.ry * Math.sqrt(Math.max(0, 1 - ((x - c.x) / c.rx) ** 2));
+  function timber(c, x1, x2) {
+    const g = el('g', {}, props);
+    const fy = c.y + c.ry * 0.42 + 8;
+    const by = Math.max(ceilingAt(c, x1), ceilingAt(c, x2)) + 7;
+    [x1, x2].forEach((x) => {
+      el('rect', { x: x - 4, y: by, width: 8, height: fy - by, fill: '#6b4a2f', stroke: '#2f2014', 'stroke-width': 1 }, g);
+      el('line', { x1: x - 1, y1: by + 6, x2: x - 1.6, y2: fy - 5, stroke: '#4a321f', 'stroke-width': 1 }, g);
+      el('rect', { x: x - 6, y: fy - 3, width: 12, height: 4, rx: 1, fill: '#4a321f' }, g);
+    });
+    el('rect', { x: x1 - 9, y: by - 7, width: x2 - x1 + 18, height: 8, rx: 1.5, fill: '#7a5636', stroke: '#2f2014', 'stroke-width': 1 }, g);
+    el('line', { x1: x1 - 5, y1: by - 3, x2: x2 + 5, y2: by - 3.6, stroke: '#5a3d25', 'stroke-width': 1 }, g);
+    el('path', { d: `M${x1 + 3} ${by + 16} L${x1 + 17} ${by + 1}`, stroke: '#634429', 'stroke-width': 4, 'stroke-linecap': 'round' }, g);
+    el('path', { d: `M${x2 - 3} ${by + 16} L${x2 - 17} ${by + 1}`, stroke: '#634429', 'stroke-width': 4, 'stroke-linecap': 'round' }, g);
+    [x1, x2].forEach((x) => el('circle', { cx: x, cy: by - 3, r: 1.4, fill: '#9a9aa0' }, g));
+    return by;
+  }
+  function lantern(parent, x, y, on) {
+    const g = el('g', { transform: `translate(${x} ${y})` }, parent);
+    el('line', { x1: 0, y1: -12, x2: 0, y2: 1, stroke: '#2a2a2e', 'stroke-width': 1.2 }, g);
+    const halo = el('circle', { cx: 0, cy: 10, r: 26, fill: 'url(#warm)', opacity: on ? 1 : 0 }, g);
+    el('path', { d: 'M-5 3 L0 0 L5 3 Z', fill: '#2f2f33' }, g);
+    const glass = el('rect', { x: -4.5, y: 3.5, width: 9, height: 12, rx: 2.5, fill: on ? '#ffd27a' : '#3a2a1f', stroke: '#2f2f33', 'stroke-width': 1.6 }, g);
+    el('line', { x1: 0, y1: 4, x2: 0, y2: 15, stroke: '#2f2f33', 'stroke-width': 1 }, g);
+    el('rect', { x: -5.5, y: 15, width: 11, height: 2.6, rx: 1, fill: '#2f2f33' }, g);
+    const L = { x, y: y + 10, halo, glass, on, phase: noise(x * 0.7 + y) * 6, light: null };
+    lanterns.push(L);
+    return L;
+  }
+  function lanternOn(L) {
+    L.on = true;
+    L.glass.setAttribute('fill', '#ffd27a');
+    L.halo.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 500, fill: 'forwards' });
+    if (L.light) { L.light.setAttribute('rx', 80); L.light.setAttribute('ry', 64); }
+  }
+  {
+    const tb = timber(CH.treasury, CH.treasury.x - 92, CH.treasury.x + 92);
+    lantern(props, CH.treasury.x - 50, tb + 2, true);
+    const pb = timber(CH.pool, CH.pool.x - 100, CH.pool.x + 110);
+    lantern(props, CH.pool.x - 74, pb + 2, true);
+    timber(CH.furnace, CH.furnace.x - 88, CH.furnace.x + 92);
+  }
+
   // ---------- stations ----------
-  // fee vault: a round safe door, the taproot plugs into it
+  // fee vault: a masonry strongroom wall built into the chamber, the safe door
+  // set into it; the taproot comes in through the top and the feeder leaves below
+  {
+    const c = CH.vault, fy = c.y + c.ry * 0.42;
+    const ax0 = SAFE.x - 58, ax1 = SAFE.x + 58, spring = SAFE.y - 14;
+    const arch = `M${ax0} ${fy + 2} L${ax0} ${spring} A58 40 0 0 1 ${ax1} ${spring} L${ax1} ${fy + 2} Z`;
+    el('path', { d: arch }, el('clipPath', { id: 'vaultArch' }, defs));
+    const wall = el('g', { 'clip-path': `url(#${chamberClip.vault})` }, props);
+    const bricks = el('g', { 'clip-path': 'url(#vaultArch)' }, wall);
+    el('rect', { x: ax0, y: c.y - c.ry, width: ax1 - ax0, height: fy - c.y + c.ry + 4, fill: '#2a2724' }, bricks);
+    for (let row = 0, y = c.y - c.ry; y < fy + 2; row++, y += 10) {
+      for (let x = ax0 - (row % 2) * 11, k = 0; x < ax1; x += 22, k++) {
+        const v = noise(row * 31 + k * 7);
+        el('rect', { x: x + 1, y: y + 1, width: 20, height: 8, rx: 1.5, fill: v < 0.33 ? '#57524b' : v < 0.66 ? '#4d4842' : '#615b53' }, bricks);
+      }
+    }
+    // stone arch around the wall
+    for (let i = 0; i <= 12; i++) {
+      const a = Math.PI + (i / 12) * Math.PI, bx = SAFE.x + Math.cos(a) * 60, by = spring + Math.sin(a) * 42;
+      el('rect', { x: -8, y: -5, width: 16, height: 10, rx: 2, fill: i % 2 ? '#6b665e' : '#77716a', stroke: '#2a2724', 'stroke-width': 1, transform: `translate(${bx.toFixed(1)} ${by.toFixed(1)}) rotate(${(a * 180 / Math.PI + 90).toFixed(0)})` }, wall);
+    }
+    [ax0 - 2, ax1 + 2].forEach((x) => {
+      for (let y = spring; y < fy; y += 11) el('rect', { x: x - 6, y, width: 12, height: 10, rx: 2, fill: '#6b665e', stroke: '#2a2724', 'stroke-width': 1 }, wall);
+    });
+    // stone steps under the door
+    el('rect', { x: SAFE.x - 40, y: fy + 6, width: 80, height: 7, rx: 2, fill: '#5a5650', stroke: '#2a2724', 'stroke-width': 1 }, props);
+    el('rect', { x: SAFE.x - 30, y: fy, width: 60, height: 7, rx: 2, fill: '#66615a', stroke: '#2a2724', 'stroke-width': 1 }, props);
+    // wall lanterns on brackets either side of the arch
+    [ax0 - 14, ax1 + 14].forEach((x) => {
+      const y = spring - 16;
+      el('path', { d: `M${x + (x < SAFE.x ? 10 : -10)} ${y - 12} H${x} V${y - 10}`, stroke: '#2f2f33', 'stroke-width': 2.2, fill: 'none' }, props);
+      lantern(props, x, y - 2, true);
+    });
+  }
   const vault = el('g', { transform: `translate(${SAFE.x} ${SAFE.y})` }, props);
+  el('circle', { cx: 0, cy: 0, r: 37, fill: '#141210' }, vault);
+  el('circle', { cx: 0, cy: 0, r: 35, fill: 'none', stroke: '#8a8a90', 'stroke-width': 1.5, opacity: 0.5 }, vault);
+  el('circle', { cx: 2, cy: 3, r: 32, fill: '#000', opacity: 0.4 }, vault);
   el('circle', { cx: 0, cy: 0, r: 31, fill: 'url(#metal)', stroke: '#5a5a60', 'stroke-width': 3 }, vault);
+  el('circle', { cx: 0, cy: 0, r: 24, fill: 'none', stroke: '#2e2e32', 'stroke-width': 2 }, vault);
+  el('rect', { x: 26, y: -9, width: 7, height: 18, rx: 2, fill: '#3a3a3f', stroke: '#6a6a70' }, vault);
   for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; el('circle', { cx: Math.cos(a) * 25, cy: Math.sin(a) * 25, r: 2, fill: '#77777d' }, vault); }
   const wheel = el('g', {}, vault);
   el('circle', { cx: 0, cy: 0, r: 13, fill: 'none', stroke: '#8a8a90', 'stroke-width': 3 }, wheel);
@@ -322,31 +475,79 @@
   const vaultLight = el('circle', { cx: 24, cy: -26, r: 3.5, fill: '#5a2a08' }, vault);
   label(CH.vault.x + 196, CH.vault.y - 8, 'FEE VAULT', '2% of every trade splits here');
 
-  // shared ROOTS/wXMR pool, both liquidity roots drink from it
+  // shared ROOTS/wXMR liquidity: a riveted glass tank, both liquidity roots drink from it
+  const T = TANK, tw = T.x1 - T.x0;
+  const tankBack = el('g', {}, props);
+  el('rect', { x: T.x0 - 4, y: T.bottom - 2, width: tw + 8, height: 8, rx: 2, fill: '#2a2a2e' }, tankBack);
+  el('rect', { x: T.x0 + 6, y: T.bottom + 4, width: 10, height: 6, fill: '#1f1f22' }, tankBack);
+  el('rect', { x: T.x1 - 16, y: T.bottom + 4, width: 10, height: 6, fill: '#1f1f22' }, tankBack);
+  el('rect', { x: T.x0, y: T.top, width: tw, height: T.bottom - T.top, rx: 6, fill: '#140c07', stroke: '#3a3a3f', 'stroke-width': 2 }, tankBack);
+  // outlet pipe and valve on the tank's right side, running into the floor
+  el('path', { d: `M${T.x1} ${T.bottom - 18} h10 q6 0 6 6 v22`, stroke: '#4a4a50', 'stroke-width': 6, fill: 'none', 'stroke-linecap': 'round' }, tankBack);
+  const valve = el('g', { transform: `translate(${T.x1 + 16} ${T.bottom - 4})` }, tankBack);
+  el('circle', { r: 6, fill: 'none', stroke: '#c94f02', 'stroke-width': 2 }, valve);
+  el('path', { d: 'M-6 0 H6 M0 -6 V6', stroke: '#c94f02', 'stroke-width': 1.6 }, valve);
+
   const poolBack = el('g', { 'clip-path': 'url(#poolClip)' }, props);
   let poolLevel = CH.pool.y + 12;
   const liquid = el('path', { fill: 'url(#liquid)' }, poolBack);
-  const liquidShine = el('path', { fill: 'none', stroke: '#ffc27a', 'stroke-width': 1.5, opacity: 0.6 }, poolBack);
+  const liquidShine = el('path', { fill: 'none', stroke: '#ffc27a', 'stroke-width': 1.5, opacity: 0.7 }, poolBack);
+  // the front of the liquid sits over the root tips so they look submerged
   const poolFront = el('g', { 'clip-path': 'url(#poolClip)' }, world);
   const liquidFront = el('path', { fill: 'url(#liquid)', opacity: 0.55 }, poolFront);
-  label(CH.pool.x, CH.pool.y + CH.pool.ry + 24, 'ROOTS/wXMR POOL', '25% + 10% liquidity, new LP burned', '#ff8a4a');
+
+  // glass, rim, bands and gauge are drawn over the liquid and the roots
+  const tankFront = el('g', {}, world);
+  el('rect', { x: T.x0 + 6, y: T.top + 4, width: tw - 12, height: T.bottom - T.top - 12, fill: '#cfe8ff', opacity: 0.05 }, tankFront);
+  el('path', { d: `M${T.x0 + 14} ${T.top + 12} v${T.bottom - T.top - 32}`, stroke: '#fff', 'stroke-width': 3, opacity: 0.16, 'stroke-linecap': 'round' }, tankFront);
+  el('path', { d: `M${T.x0 + 22} ${T.top + 14} v${(T.bottom - T.top) * 0.35}`, stroke: '#fff', 'stroke-width': 1.5, opacity: 0.12, 'stroke-linecap': 'round' }, tankFront);
+  [T.x0, T.x1 - 6].forEach((x) => el('rect', { x, y: T.top, width: 6, height: T.bottom - T.top, fill: '#3e3e44', stroke: '#1f1f22', 'stroke-width': 1 }, tankFront));
+  el('rect', { x: T.x0 - 5, y: T.top - 4, width: tw + 10, height: 8, rx: 3, fill: '#55555c', stroke: '#1f1f22', 'stroke-width': 1 }, tankFront);
+  el('rect', { x: T.x0 - 3, y: T.bottom - 10, width: tw + 6, height: 8, rx: 2, fill: '#48484e', stroke: '#1f1f22', 'stroke-width': 1 }, tankFront);
+  for (let k = 0; k < 7; k++) {
+    el('circle', { cx: T.x0 + 6 + k * ((tw - 12) / 6), cy: T.top, r: 1.5, fill: '#a0a0a8' }, tankFront);
+    el('circle', { cx: T.x0 + 6 + k * ((tw - 12) / 6), cy: T.bottom - 6, r: 1.5, fill: '#a0a0a8' }, tankFront);
+  }
+  // level gauge on the left wall of the tank
+  const gauge = el('g', { transform: `translate(${T.x0 + 3} ${T.top + 26})` }, tankFront);
+  el('circle', { r: 10, fill: '#e9e3d6', stroke: '#2f2f33', 'stroke-width': 2.5 }, gauge);
+  for (let k = 0; k < 5; k++) { const a = Math.PI * (0.8 + k * 0.35); el('line', { x1: Math.cos(a) * 6, y1: Math.sin(a) * 6, x2: Math.cos(a) * 8, y2: Math.sin(a) * 8, stroke: '#2f2f33', 'stroke-width': 1 }, gauge); }
+  const needle = el('line', { x1: 0, y1: 0, x2: 0, y2: -7, stroke: '#c94f02', 'stroke-width': 1.6, 'stroke-linecap': 'round' }, gauge);
+  el('circle', { r: 1.6, fill: '#2f2f33' }, gauge);
+  // brass plate
+  const plateG = el('g', { transform: `translate(${(T.x0 + T.x1) / 2} ${T.bottom - 24})` }, tankFront);
+  el('rect', { x: -26, y: -8, width: 52, height: 14, rx: 2, fill: '#b8902c', stroke: '#6a4f12', 'stroke-width': 1 }, plateG);
+  text(plateG, 0, 2.5, 'LP', { 'font-size': 9, fill: '#3a2a08', 'font-weight': 900, 'letter-spacing': 2 });
+  label(CH.pool.x + 34, CH.pool.y + CH.pool.ry + 26, 'ROOTS/wXMR POOL', '25% + 10% liquidity, new LP burned', '#ff8a4a');
   function drawLiquid(t) {
-    // the left part of the chamber is a dry ledge where the mole stands
-    const x0 = N.pool.x + 34, x1 = CH.pool.x + CH.pool.rx;
-    let d = `M${x0 - 10} ${CH.pool.y + 80} C${x0 - 6} ${poolLevel + 20} ${x0 - 4} ${poolLevel + 2} ${x0} ${poolLevel}`;
+    const x0 = T.x0 + 6, x1 = T.x1 - 6;
+    let d = `M${x0} ${T.bottom} L${x0} ${poolLevel}`;
     let s = '';
-    for (let x = x0 + 8; x <= x1; x += 8) {
-      const y = poolLevel + Math.sin(x / 14 + t * 2.4) * 1.8 + Math.sin(x / 7 - t * 3.1) * 0.8;
+    for (let x = x0; x <= x1; x += 6) {
+      const y = poolLevel + Math.sin(x / 12 + t * 2.4) * 1.6 + Math.sin(x / 6 - t * 3.1) * 0.7;
       d += ` L${x} ${y.toFixed(1)}`;
       s += (s ? ' L' : 'M') + `${x} ${(y + 1).toFixed(1)}`;
     }
-    d += ` L${x1} ${CH.pool.y + 80} Z`;
+    d += ` L${x1} ${T.bottom} Z`;
     liquid.setAttribute('d', d);
     liquidFront.setAttribute('d', d);
     liquidShine.setAttribute('d', s);
+    // the gauge reads the fill level
+    const fill = clamp((T.bottom - poolLevel) / (T.bottom - T.top), 0, 1);
+    needle.setAttribute('transform', `rotate(${(-120 + fill * 240).toFixed(1)})`);
   }
 
-  // rewards: a pile of wXMR coins the rewards root feeds
+  // rewards: an open treasure chest overflowing into a pile of wXMR coins
+  const chest = el('g', { transform: `translate(${PILE.x + 24} ${PILE.y - 2})` }, props);
+  el('path', { d: 'M-16 -14 L-18 -30 L14 -34 L16 -16 Z', fill: '#6b4424', stroke: '#2f2014', 'stroke-width': 1.2 }, chest);
+  el('path', { d: 'M-17 -22 L15 -26', stroke: '#c9a227', 'stroke-width': 2 }, chest);
+  el('ellipse', { cx: 0, cy: -14, rx: 16, ry: 5, fill: '#ffd27a', opacity: 0.9 }, chest);
+  el('ellipse', { cx: 0, cy: -16, rx: 22, ry: 12, fill: 'url(#warm)' }, chest);
+  el('rect', { x: -17, y: -14, width: 34, height: 18, rx: 2, fill: '#7a4e2a', stroke: '#2f2014', 'stroke-width': 1.2 }, chest);
+  el('rect', { x: -17, y: -9, width: 34, height: 3, fill: '#c9a227' }, chest);
+  el('rect', { x: -3, y: -11, width: 6, height: 7, rx: 1, fill: '#e0b13a', stroke: '#7a5a10', 'stroke-width': 0.8 }, chest);
+  const sparkleG = el('g', {}, props);
+  const sparkles2 = Array.from({ length: 5 }, () => el('path', { d: 'M0 -4 L1 -1 L4 0 L1 1 L0 4 L-1 1 L-4 0 L-1 -1 Z', fill: '#fff3d0', opacity: 0 }, sparkleG));
   const pileG = el('g', {}, props);
   let pileCount = 9;
   function drawPile() {
@@ -372,6 +573,13 @@
 
   // burn pit: buyback budget lands in the crate, the mole burns it
   const furnace = el('g', {}, props);
+  // brick arch behind the fire
+  for (let i = 0; i < 11; i++) {
+    const a = Math.PI * (1.05 + (i / 10) * 0.9), r = 48;
+    const bx = fireBase.x + Math.cos(a) * r, by = fireBase.y + 2 + Math.sin(a) * r * 1.05;
+    el('rect', { x: -7, y: -4.5, width: 14, height: 9, rx: 1.5, fill: i % 2 ? '#7a3b22' : '#8e4a2a', stroke: '#2a140b', 'stroke-width': 1, transform: `translate(${bx.toFixed(1)} ${by.toFixed(1)}) rotate(${(a * 180 / Math.PI + 90).toFixed(0)})` }, furnace);
+  }
+  el('path', { d: `M${fireBase.x - 40} ${fireBase.y + 4} A40 42 0 0 1 ${fireBase.x + 40} ${fireBase.y + 4} Z`, fill: '#0c0604' }, furnace);
   for (let i = 0; i < 7; i++) {
     const a = Math.PI + (i / 6) * Math.PI;
     el('ellipse', { cx: fireBase.x + Math.cos(a) * 34, cy: fireBase.y + 6 + (i % 2) * 2, rx: 8, ry: 5.5, fill: i % 2 ? '#4b3a2c' : '#5c4630' }, furnace);
@@ -411,29 +619,53 @@
       const prev = ROOM_PREV[x] === 'h' ? h : `r${L}_${ROOM_PREV[x]}`;
       const px = N[prev].x;
       addEdge(prev, node, `M${px} ${ny} C${px + (x - px) * 0.35} ${ny + 8} ${px + (x - px) * 0.65} ${ny + 8} ${x} ${ny}`, true);
-      const shape = chamberShape({ x, y, rx: 56, ry: 34 }, true);
+      // a proper room: taller than the corridor, which enters at floor level
+      const shape = chamberShape({ x, y: y - 8, rx: 64, ry: 46 }, true);
       const g = el('g', { opacity: 0 }, roomDecor);
       const glow = el('ellipse', { cx: x, cy: y, rx: 76, ry: 50, fill: 'url(#warm)', opacity: 0 }, g);
-      el('rect', { x: x - 40, y: y + 6, width: 26, height: 10, rx: 4, fill: '#3a2a1f' }, g);
-      el('ellipse', { cx: x - 35, cy: y + 5, rx: 6, ry: 3.5, fill: '#6b4d36' }, g);
-      const lamp = el('circle', { cx: x + 32, cy: y - 18, r: 3.5, fill: '#3a2a1f' }, g);
+      // a straw bed with a pillow
+      el('ellipse', { cx: x - 30, cy: y + 16, rx: 18, ry: 5.5, fill: '#8a6a2a', stroke: '#5a4418', 'stroke-width': 1 }, g);
+      for (let k = 0; k < 6; k++) el('line', { x1: x - 44 + k * 5, y1: y + 13 + (k % 2), x2: x - 40 + k * 5, y2: y + 18, stroke: '#b8923e', 'stroke-width': 0.9 }, g);
+      el('ellipse', { cx: x - 41, cy: y + 12, rx: 6, ry: 3.4, fill: '#d6c8a8' }, g);
+      // a lantern that lights up once the burrow has been paid
+      const lamp = lantern(g, x + 32, y - 40, false);
       const coins = el('g', {}, g);
-      const plate = text(g, x, y + 52, '', { 'font-size': 11, fill: '#c8c0b8', 'font-family': 'JetBrains Mono, monospace', 'font-weight': 700 });
-      const amt = text(g, x, y + 66, '', { 'font-size': 11, fill: '#ff7a1a', 'font-weight': 800 });
+      // wooden name sign on a post
+      el('line', { x1: x, y1: y + 33, x2: x, y2: y + 42, stroke: '#4a321f', 'stroke-width': 3 }, g);
+      const plank = el('rect', { x: x - 40, y: y + 41, width: 80, height: 16, rx: 3, fill: '#6b4a2f', stroke: '#2f2014', 'stroke-width': 1 }, g);
+      el('line', { x1: x - 36, y1: y + 49, x2: x + 36, y2: y + 49, stroke: '#5a3d25', 'stroke-width': 0.8, opacity: 0.6 }, g);
+      const plate = text(g, x, y + 53, '', { 'font-size': 10.5, fill: '#f2e6d0', 'font-family': 'JetBrains Mono, monospace', 'font-weight': 700 });
+      const amt = text(g, x, y + 71, '', { 'font-size': 11, fill: '#ff7a1a', 'font-weight': 800, stroke: '#120c08', 'stroke-width': 3, 'paint-order': 'stroke' });
       const lightEl = light(x, y, 0);
-      roomEls.push({ x, y, node, prev, shape, g, glow, lamp, coins, plate, amt, lightEl, owner: null, used: 0, coinsN: 0, open: false });
+      lamp.light = lightEl;
+      roomEls.push({ x, y, node, prev, shape, g, glow, lamp, coins, plate, plank, amt, lightEl, owner: null, used: 0, coinsN: 0, open: false });
     });
     levels.push(L);
     soilBand(Math.max(H, y - LEVEL_STEP / 2), y + LEVEL_STEP / 2 + 40, 1000 + L * 97);
+    sprinkleGlow(Math.max(H, y - LEVEL_STEP / 2), y + LEVEL_STEP / 2 + 40, 2000 + L * 41);
     setWorldHeight(y + 110);
   }
 
   // ---------- layers above the world ----------
   // darkness with light holes; mole, items and labels stay crisp above it
   const dark = el('rect', { x: 0, y: GROUND, width: W, height: H - GROUND, fill: '#000', opacity: 0.42, mask: 'url(#darkMask)', 'pointer-events': 'none' }, svg);
+  // glow-worms dotted through the soil, they shine through the darkness
+  const glowLayer = el('g', {}, svg);
+  const glowworms = [];
+  function sprinkleGlow(y0, y1, seed) {
+    for (let k = 0; k < (y1 - y0) / 30; k++) {
+      const x = noise(seed + k * 3) * W, y = y0 + noise(seed + k * 7) * (y1 - y0);
+      const g = el('g', { transform: `translate(${x.toFixed(1)} ${y.toFixed(1)})` }, glowLayer);
+      el('circle', { r: 5, fill: '#9dffd0', opacity: 0.12 }, g);
+      el('circle', { r: 1.3, fill: '#c8ffe6' }, g);
+      glowworms.push({ g, phase: noise(seed + k) * 9, speed: 0.6 + noise(seed + k * 11) * 1.4 });
+    }
+  }
+  sprinkleGlow(GROUND + 30, H, 900);
   // roots and the pool surface stay vivid above the darkness
   svg.appendChild(rootsLayer);
   svg.appendChild(poolFront);
+  svg.appendChild(tankFront);
   const moleLayer = el('g', {}, svg);
   const items = el('g', {}, svg);
   const fx = el('g', {}, svg);
@@ -445,6 +677,7 @@
   light(SAFE.x, SAFE.y, 120);
   light(PILE.x - 20, CH.treasury.y, 120);
   light(CH.pool.x + 30, CH.pool.y + 10, 120);
+  lanterns.forEach((L) => { if (!L.light) L.light = light(L.x, L.y, L.on ? 80 : 0); });
   const ui = el('g', {}, svg);
   const flash = el('rect', { x: 0, y: 0, width: W, height: H, fill: '#fff', opacity: 0, 'pointer-events': 'none' }, svg);
   const belowHint = el('g', { opacity: 0 }, ui);
@@ -634,7 +867,7 @@
           lastDirt = now;
         }
         if (s >= e.len) {
-          if (digging) { e.dug = true; e.outer.removeAttribute('stroke-dasharray'); e.inner.removeAttribute('stroke-dasharray'); }
+          if (digging) finishDug(e);
           walking = null;
           M.tilt = 0;
           return resolve();
@@ -724,8 +957,7 @@
       await fly('coin', handsPos(), { x: room.x + 22, y: room.y + 16 - room.coinsN * 3 }, 380, 30);
       addRoomCoin(room);
       room.amt.textContent = '+' + j.amount;
-      room.lamp.setAttribute('fill', '#ffd27a');
-      room.lightEl.setAttribute('rx', 76); room.lightEl.setAttribute('ry', 60);
+      if (!room.lamp.on) lanternOn(room.lamp);
       room.glow.animate([{ opacity: 0 }, { opacity: 1 }, { opacity: 0.25 }], { duration: 1400, fill: 'forwards' });
       M.hop = 1;
       say(room.x, room.y - 54, '+ ' + j.amount, '#9b7cf0');
@@ -786,7 +1018,7 @@
       if (!r && levels.length < MAX_LEVELS) { addLevel(); r = roomEls.find((x) => !x.owner); }
       if (!r) r = roomEls.slice().sort((a, b) => a.used - b.used)[0];
       r.owner = addr;
-      r.plate.textContent = addr.length > 12 ? addr.slice(0, 4) + '…' + addr.slice(-4) : addr;
+      setPlate(r, addr.length > 12 ? addr.slice(0, 4) + '…' + addr.slice(-4) : addr);
       r.amt.textContent = '';
       r.coins.innerHTML = ''; r.coinsN = 0;
     }
@@ -805,6 +1037,13 @@
   function whenDug(e, fn) {
     if (e.dug) return fn();
     const t = setInterval(() => { if (e.dug) { clearInterval(t); fn(); } }, 40);
+  }
+  // the sign grows to fit the wallet name
+  function setPlate(r, str) {
+    r.plate.textContent = str;
+    const w = Math.max(50, r.plate.getComputedTextLength() + 18);
+    r.plank.setAttribute('x', (r.x - w / 2).toFixed(1));
+    r.plank.setAttribute('width', w.toFixed(1));
   }
   function addRoomCoin(r) {
     if (r.coinsN >= 6) return;
@@ -825,7 +1064,7 @@
     const r = roomEls[Math.min(slot, roomEls.length - 1)];
     if (r.owner !== addr) {
       r.owner = addr;
-      r.plate.textContent = addr.length > 12 ? addr.slice(0, 4) + '…' + addr.slice(-4) : addr;
+      setPlate(r, addr.length > 12 ? addr.slice(0, 4) + '…' + addr.slice(-4) : addr);
       r.amt.textContent = '';
       setRoomCoins(r, 0);
     }
@@ -834,9 +1073,7 @@
   }
   function markDug(e) {
     if (!e || e.dug) return;
-    e.dug = true;
-    e.outer.removeAttribute('stroke-dasharray');
-    e.inner.removeAttribute('stroke-dasharray');
+    finishDug(e);
   }
   // open a burrow at once (no digging animation): shaft down to its level, corridor to it
   function digInstant(r) {
@@ -849,10 +1086,10 @@
     r.g.setAttribute('opacity', 1);
   }
   function lightRoom(r) {
-    r.lamp.setAttribute('fill', '#ffd27a');
-    r.lightEl.setAttribute('rx', 76); r.lightEl.setAttribute('ry', 60);
+    if (!r.lamp.on) lanternOn(r.lamp);
   }
-  function setPile(n) { pileCount = clamp(n, 3, 24); drawPile(); }
+  // the budget counter drives the pile, but the treasure never looks empty
+  function setPile(n) { pileCount = clamp(n + 4, 7, 24); drawPile(); }
   function setStash(n) { stashN = Math.max(0, n); stashCount.textContent = stashN ? stashN + ' queued' : ''; }
   const END_NODE = { settle: 'vault', epoch: 'treasury', burn: 'furnace', liquidity: 'pool', other: 'vault' };
 
@@ -957,6 +1194,32 @@
     }
 
     drawLiquid(t);
+
+    // lanterns flicker
+    for (const L of lanterns) {
+      if (!L.on) continue;
+      const k = 0.82 + 0.18 * Math.sin(t * 7.3 + L.phase) * Math.sin(t * 12.1 + L.phase * 2);
+      L.halo.setAttribute('opacity', k.toFixed(2));
+      if (L.light) { L.light.setAttribute('rx', (80 * k).toFixed(1)); L.light.setAttribute('ry', (64 * k).toFixed(1)); }
+    }
+    // glints on the treasure
+    if (Math.random() < dt * 2.2) {
+      const s = sparkles2[(Math.random() * sparkles2.length) | 0];
+      const x = PILE.x - 18 + Math.random() * 60, y = PILE.y - 26 + Math.random() * 22;
+      s.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${(0.6 + Math.random() * 0.8).toFixed(2)})`);
+      s.animate([{ opacity: 0 }, { opacity: 1 }, { opacity: 0 }], { duration: 700 });
+    }
+    // bubbles rising through the pool
+    if (Math.random() < dt * 3) {
+      const x = TANK.x0 + 12 + Math.random() * (TANK.x1 - TANK.x0 - 24);
+      particle(x, TANK.bottom - 12, rand(-3, 3), rand(-34, -22), rand(1.1, 2.4), '#ffd2a1', (TANK.bottom - 12 - poolLevel) / 30, 0);
+    }
+    // glow-worms breathe on and off
+    for (const w of glowworms) w.g.setAttribute('opacity', (0.25 + 0.75 * Math.max(0, Math.sin(t * w.speed + w.phase))).toFixed(2));
+    // dust drifting in the light around the mole
+    if (M.y > GROUND + 20 && Math.random() < dt * 3) {
+      particle(hp.x + rand(-70, 70), hp.y + rand(-40, 30), rand(-5, 5), rand(-6, 3), rand(0.6, 1.2), '#e8d8c0', rand(2, 3.5), -1);
+    }
 
     if (Math.random() < dt * 3) { const s = starEls[(Math.random() * starEls.length) | 0]; s.setAttribute('opacity', rand(0.15, 0.8).toFixed(2)); }
     const lookX = clamp((M.x - 1008) / 200, -1, 1) * 3, lookY = clamp((M.y - GROUND) / 200, -1, 1) * 1.2;
