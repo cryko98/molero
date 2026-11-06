@@ -18,6 +18,8 @@
 //   INDEX_FROM            optional ISO date the index starts at (e.g. the launch day);
 //                         default: midnight UTC of the previous day
 //   MAX_BACKFILL          optional cap on transactions read on a first build (5000)
+//   CACHE_SECONDS         optional edge cache window; RPC is hit about once per window (20)
+//   PERSIST_MINUTES       optional interval between Blob saves (60)
 
 const PROGRAM = '9RSfkTWckTiuCQTae86bgqZWumcLcj4fzDLxi9qNoVeM';
 const WXMR = 'WXMRyRZhsa19ety5erZhHg4N3xj3EVN92u94422teJp';
@@ -28,8 +30,6 @@ const BLOB_PATH = 'molero/state.json';
 const KEEP_EVENTS = 400;      // events kept in state
 const SEND_EVENTS = 160;      // events sent to the browser
 const SLOTS = 240;            // holder burrows (40 levels of 6)
-const DELAY = 8000;           // ms between the block time and playback, so every cache window has it
-const PERSIST_EVERY = 10 * 60 * 1000;
 const BUDGET_MS = 30000;      // indexing time per request, well inside maxDuration
 // how long each job takes at normal pace; the scene fits its animation into this
 const BASE_MS = { settle: 20000, epoch: 5000, claim: 9000, claimNew: 12500, burn: 7500, liquidity: 9000, other: 3000 };
@@ -41,6 +41,11 @@ const MINT = env('MOLERO_MINT');
 const PAIR = env('MOLERO_PAIR', 'wXMR') === 'ROOTS' ? 'ROOTS' : 'wXMR';
 const RPC = env('SOLANA_RPC_URL') || (env('HELIUS_API_KEY') ? `https://mainnet.helius-rpc.com/?api-key=${env('HELIUS_API_KEY')}` : '');
 const MAX_BACKFILL = +env('MAX_BACKFILL', '5000') || 5000;
+// usage scales with these two: one RPC round per cache window while anyone is watching
+const CACHE_S = Math.max(2, +env('CACHE_SECONDS', '20') || 20);
+// playback waits long enough for a fresh event to reach every visitor through the cache
+const DELAY = (CACHE_S * 1.5 + 10) * 1000;
+const PERSIST_EVERY = Math.max(1, +env('PERSIST_MINUTES', '60') || 60) * 60 * 1000;
 // every instance starts the index at the same moment, so all of them agree
 // on burrow order and timing even before a shared Blob state exists
 const INDEX_FROM = Date.parse(env('INDEX_FROM')) || (Math.floor(Date.now() / 86400000) - 1) * 86400000;
@@ -301,11 +306,12 @@ export default async function handler(req, res) {
       events: st.events.slice(-SEND_EVENTS),
       slots: st.slots.map((s, i) => (s ? [i, s.a, s.n, s.last, s.p || null] : null)).filter(Boolean),
       counters: st.counters, totals: st.totals, pairs: st.pairs, indexing: st.backlog.length,
+      poll: CACHE_S,
     };
     res.statusCode = 200;
     res.setHeader('content-type', 'application/json');
     // one RPC round per cache window, whatever the traffic
-    res.setHeader('cache-control', 'public, s-maxage=4, stale-while-revalidate=20');
+    res.setHeader('cache-control', `public, s-maxage=${CACHE_S}, stale-while-revalidate=${CACHE_S * 4}`);
     res.end(JSON.stringify(body));
   } catch (e) {
     console.error(e);

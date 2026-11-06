@@ -559,6 +559,8 @@ function startTimeline(data) {
   later.forEach(schedule);
   renderTotals(data);
 
+  // poll at the server's cache pace: asking more often only re-reads the same answer
+  const pollEvery = Math.max(5, (data.poll || 10) / 2) * 1000;
   setInterval(async () => {
     try {
       const d = await fetchTimeline();
@@ -567,7 +569,7 @@ function startTimeline(data) {
       renderTotals(d);
       liveStatus(d);
     } catch { setStatus('poll', 'Reconnecting to the burrow…'); }
-  }, 5000);
+  }, pollEvery);
 
   // Browsers stop animating hidden tabs. Coming back after missing part of the
   // timeline, rebuild from the shared state instead of replaying a backlog.
