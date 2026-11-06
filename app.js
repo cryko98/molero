@@ -405,7 +405,7 @@ function setStatus(cls, msg) {
 }
 $('watching').innerHTML = CONFIG.TOKEN_MINT
   ? 'Watching <b>$MOLERO</b> · ' + short(CONFIG.TOKEN_MINT)
-  : 'Pre-launch: watching <b>every XMR ROOTS coin</b>';
+  : 'The mole goes live with <b>$MOLERO</b> at launch';
 
 // Websocket for instant logs; HTTP polling keeps working whenever it drops.
 let ws, wsOpen = false, wsRetry = 0;
@@ -582,16 +582,34 @@ function startTimeline(data) {
   setInterval(() => { if (document.hidden && TL.pending.length && TL.pending[0].playAt <= serverNow()) missed = true; }, 1000);
 }
 
+// ---------- pre-launch ----------
+// Until $MOLERO exists on chain the burrow is quiet: nothing is fetched, the
+// mole just wanders. The page checks every few minutes (a cached, RPC-free
+// answer) and reloads into live mode once MOLERO_MINT is set on the server.
+function startPrelaunch(data) {
+  setStatus('', 'Launching soon · the burrow opens at launch');
+  $('watching').innerHTML = 'The mole goes live with <b>$MOLERO</b> at launch';
+  $('btn-speed').hidden = true;
+  const empty = $('feed-empty');
+  if (empty) empty.textContent = 'No jobs yet. The mole starts working the moment $MOLERO launches.';
+  ['st-jobs', 'st-rewards', 'st-holders'].forEach((id) => { $(id).textContent = '—'; });
+  if (data && data.poll) {
+    setInterval(async () => {
+      try { const d = await fetchTimeline(); if (!d.prelaunch) location.reload(); } catch {}
+    }, data.poll * 1000);
+  }
+}
+
 // ---------- start ----------
 function startDirect() {
+  // no server function and no mint configured yet: stay quiet
+  if (!CONFIG.TOKEN_MINT) return startPrelaunch(null);
   connectWs();
   poll(CONFIG.BACKFILL);
   setInterval(() => { if (!wsOpen) poll(10); }, 15000);
-  // If nothing real shows up soon, play one demo cycle so visitors see what the mole does.
-  setTimeout(() => { if (!stats.jobs && !Burrow.busy) demoCycle(); }, 12000);
 }
 
 setStatus('', 'Connecting to Solana…');
 refreshBurned();
 setInterval(refreshBurned, 120000);
-fetchTimeline().then(startTimeline, startDirect);
+fetchTimeline().then((d) => (d.prelaunch ? startPrelaunch(d) : startTimeline(d)), startDirect);

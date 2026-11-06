@@ -10,7 +10,8 @@
 //
 // Environment (Vercel project settings):
 //   HELIUS_API_KEY        required, kept server side
-//   MOLERO_MINT           the $MOLERO mint; empty = watch every XMR ROOTS coin
+//   MOLERO_MINT           the $MOLERO mint; while empty the site stays in pre-launch
+//                         mode and makes no RPC calls at all
 //   MOLERO_PAIR           wXMR (default) or ROOTS
 //   BLOB_READ_WRITE_TOKEN optional; set automatically when a Vercel Blob store
 //                         is connected, keeps the index across cold starts
@@ -293,6 +294,14 @@ async function current() {
 }
 
 export default async function handler(req, res) {
+  // Before launch there is nothing of ours on chain: answer without touching the
+  // RPC, cached for minutes, so a page left open costs nothing until MOLERO_MINT is set.
+  if (!MINT) {
+    res.statusCode = 200;
+    res.setHeader('content-type', 'application/json');
+    res.setHeader('cache-control', 'public, s-maxage=300, stale-while-revalidate=600');
+    return res.end(JSON.stringify({ prelaunch: true, now: Date.now(), pair: PAIR, poll: 300 }));
+  }
   if (!RPC) {
     res.statusCode = 503;
     res.setHeader('content-type', 'application/json');
